@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PhoneInput } from "react-international-phone"
 import "react-international-phone/style.css"
 import { DayPicker } from "react-day-picker"
@@ -78,6 +79,17 @@ export default function RegisterPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [passwordFocus, setPasswordFocus] = useState(false)
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null)
+  const [selectedRole, setSelectedRole] = useState<"resident" | "official">("resident")
+  const [registrationSuccess, setRegistrationSuccess] = useState(false)
+
+  useEffect(() => {
+    if (confirmPassword && password && confirmPassword !== password) {
+      setConfirmPasswordError("Passwords do not match")
+    } else {
+      setConfirmPasswordError(null)
+    }
+  }, [confirmPassword, password])
 
   const handlePhoneChange = (phone: string, meta: { country: { iso2: string }, inputValue: string }) => {
     // Check if country changed
@@ -142,6 +154,7 @@ export default function RegisterPage() {
         body: JSON.stringify({ 
           email, 
           password, 
+          role: selectedRole,
           full_name: fullName,
           phone: fullPhone,
           address,
@@ -156,8 +169,12 @@ export default function RegisterPage() {
         throw new Error(data.error || "Registration failed")
       }
 
-      router.push("/resident")
-      router.refresh()
+      if (selectedRole === "official") {
+        setRegistrationSuccess(true)
+      } else {
+        router.push("/resident")
+        router.refresh()
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed")
     } finally {
@@ -172,12 +189,27 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Resident Registration</CardTitle>
-            <CardDescription>For residents only. Admin/Officials should use the Admin Login.</CardDescription>
+            <CardTitle className="text-2xl font-bold">Account Registration</CardTitle>
+            <CardDescription>Residents can log in immediately. Officials require admin approval.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleRegister}>
               <div className="flex flex-col gap-4">
+                <div className="grid gap-2">
+                  <Label>Register as</Label>
+                  <Select value={selectedRole} onValueChange={(v: "resident" | "official") => setSelectedRole(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="resident">Resident</SelectItem>
+                      <SelectItem value="official">Official</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {selectedRole === "official" && (
+                    <p className="text-xs text-amber-600">Your account will require approval from an admin before you can log in.</p>
+                  )}
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="fullName">Full name</Label>
                   <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
@@ -286,7 +318,18 @@ export default function RegisterPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="confirmPassword">Confirm password</Label>
-                  <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} />
+                  <Input 
+                    id="confirmPassword" 
+                    type="password" 
+                    value={confirmPassword} 
+                    onChange={(e) => setConfirmPassword(e.target.value)} 
+                    required 
+                    minLength={6}
+                    className={confirmPasswordError ? "border-red-500" : ""}
+                  />
+                  {confirmPasswordError && (
+                    <p className="text-xs text-red-500">{confirmPasswordError}</p>
+                  )}
                 </div>
                 <div className="flex items-start gap-2">
                   <input
@@ -317,7 +360,7 @@ export default function RegisterPage() {
                   </Label>
                 </div>
                 {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button type="submit" className="w-full" disabled={isLoading || !!confirmPasswordError}>
                   {isLoading ? "Creating account..." : "Register"}
                 </Button>
                 <div className="text-center text-sm">
@@ -328,6 +371,31 @@ export default function RegisterPage() {
           </CardContent>
         </Card>
       </div>
+      {/* Registration Success Dialog for Officials */}
+      <Dialog open={registrationSuccess} onOpenChange={setRegistrationSuccess}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registration Submitted</DialogTitle>
+            <DialogDescription>Your official account is pending approval.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-center">
+            <div className="mb-4 rounded-full bg-amber-100 p-4 w-16 h-16 mx-auto flex items-center justify-center">
+              <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Your registration as an official has been submitted. An admin will review your account before you can log in.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              You will be redirected to the login page.
+            </p>
+          </div>
+          <div className="flex justify-center">
+            <Button onClick={() => { setRegistrationSuccess(false); router.push("/login") }}>OK</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* Terms of Service Dialog */}
       <Dialog open={termsOpen} onOpenChange={setTermsOpen}>
         <DialogContent className="max-w-2xl">

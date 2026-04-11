@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const user = await queryOne<{ id: number; email: string; password_hash: string; full_name: string | null; role: string }>(
-      "SELECT id, email, password_hash, full_name, role FROM users WHERE email = ?",
+    const user = await queryOne<{ id: number; email: string; password_hash: string; full_name: string | null; role: string; approval_status: string }>(
+      "SELECT id, email, password_hash, full_name, role, COALESCE(approval_status, 'approved') as approval_status FROM users WHERE email = ?",
       [email]
     )
 
@@ -34,6 +34,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Invalid email or password" },
         { status: 401, headers }
+      )
+    }
+
+    if (user.role === "official" && user.approval_status !== "approved") {
+      return NextResponse.json(
+        { success: false, error: "Your account is pending approval. Please contact the admin." },
+        { status: 403, headers }
       )
     }
 

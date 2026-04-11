@@ -4,6 +4,7 @@ import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { AdminSidebar } from "@/components/admin-sidebar"
 import { AdminHeader } from "@/components/admin-header"
 import { AdminCreateUser } from "@/components/admin-create-user"
+import { AdminUserApprovals } from "@/components/admin-user-approvals"
 
 export default async function AdminUsersPage() {
   const cookieStore = await cookies()
@@ -21,7 +22,8 @@ export default async function AdminUsersPage() {
     <div className="min-h-screen bg-background">
       <AdminSidebar />
       <AdminHeader />
-      <main className="ml-64 p-6">
+      <main className="ml-64 p-6 space-y-6">
+        <AdminUserApprovals />
         <div className="max-w-xl">
           <AdminCreateUser />
         </div>

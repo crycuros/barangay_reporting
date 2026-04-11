@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       email: string
       full_name: string | null
       role: string
+      approval_status: string
       phone: string | null
       address: string | null
       zone: string | null
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
         u.email, 
         u.full_name, 
         u.role, 
+        COALESCE(u.approval_status, 'approved') as approval_status,
         rp.phone, 
         rp.address, 
         rp.zone, 
@@ -49,6 +51,7 @@ export async function GET(request: NextRequest) {
         email: u.email,
         full_name: u.full_name,
         role: u.role,
+        approval_status: u.approval_status,
         phone: u.phone,
         address: u.address,
         zone: u.zone,
@@ -91,11 +94,13 @@ export async function POST(request: NextRequest) {
     }
 
     const password_hash = await bcrypt.hash(password, 10)
-    await execute("INSERT INTO users (email, password_hash, full_name, role) VALUES (?, ?, ?, ?)", [
+    const approvalStatus = role === "admin" ? "approved" : "approved"
+    await execute("INSERT INTO users (email, password_hash, full_name, role, approval_status) VALUES (?, ?, ?, ?, ?)", [
       email,
       password_hash,
       fullName || null,
       role,
+      approvalStatus,
     ])
 
     return NextResponse.json({ success: true })

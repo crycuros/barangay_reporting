@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   role VARCHAR(20) NOT NULL DEFAULT 'resident',
   avatar_url LONGTEXT,
   is_verified BOOLEAN DEFAULT FALSE,
+  approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
   kyc_status ENUM('none', 'pending', 'under_review', 'approved', 'rejected') DEFAULT 'none',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_approval_status ON users(approval_status);
 
 -- Resident profiles (additional info)
 CREATE TABLE IF NOT EXISTS resident_profiles (

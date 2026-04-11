@@ -74,7 +74,8 @@ export default function KYCPage() {
     }
   }
 
-  const handleFileUpload = async (file: File, field: string) => {
+  const handleFileUpload = async (file: File | null, field: string) => {
+    if (!file) return ""
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -472,7 +473,10 @@ function FileUploadBox({ label, currentValue, onChange }: any) {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => e.target.files && onChange(e.target.files[0])}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) onChange(file)
+              }}
               className="hidden"
               id={`upload-${label}`}
             />
