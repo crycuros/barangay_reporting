@@ -1,0 +1,108 @@
+import { type NextRequest, NextResponse } from "next/server"
+import { execute, queryOne, queryAll } from "@/lib/db"
+import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const token = getSessionFromRequest(request.cookies, request.headers)
+    const session = token ? await verifySession(token) : null
+
+    const { id } = await params
+    const body = await request.json()
+
+    // Handle like/unlike — allow only residents
+    if (typeof body.toggleLike === "boolean") {
+      if (!session || session.role !== "resident") {
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      }
+
+      const userId = session.sub
+      const announcementId = id
+
+      // Check if already liked (following the recommended pattern)
+      const existingLike = await queryOne(
+        "SELECT id FROM announcement_likes WHERE announcement_id = ? AND user_id = ?",
+        [announcementId, userId]
+      )
+
+      if (body.toggleLike) {
+        // Add like if not already liked
+        if (!existingLike) {
+          await execute(
+            "INSERT INTO announcement_likes (announcement_id, user_id) VALUES (?, ?)",
+            [announcementId, userId]
+          )
+          await execute(
+            "UPDATE announcements SET likes = COALESCE(likes, 0) + 1 WHERE id = ?",
+            [announcementId]
+          )
+        }
+      } else {
+        // Remove like if exists
+        if (existingLike) {
+          await execute(
+            "DELETE FROM announcement_likes WHERE announcement_id = ? AND user_id = ?",
+            [announcementId, userId]
+          )
+          await execute(
+            "UPDATE announcements SET likes = GREATEST(0, COALESCE(likes, 0) - 1) WHERE id = ?",
+            [announcementId]
+          )
+        }
+      }
+
+      const updated = await queryOne("SELECT * FROM announcements WHERE id = ?", [announcementId])
+      const userHasLiked = !!(await queryOne(
+        "SELECT id FROM announcement_likes WHERE announcement_id = ? AND user_id = ?",
+        [announcementId, userId]
+      ))
+
+      return NextResponse.json({ success: true, data: updated, userHasLiked })
+    }
+
+    const fields: string[] = []
+    const values: any[] = []
+    if (body.title !== undefined) { fields.push("title = ?"); values.push(body.title) }
+    if (body.content !== undefined) { fields.push("content = ?"); values.push(body.content) }
+    if (body.type !== undefined) { fields.push("type = ?"); values.push(body.type) }
+    if (body.priority !== undefined) { fields.push("priority = ?"); values.push(body.priority) }
+    if (body.image_url !== undefined) { fields.push("image_url = ?"); values.push(body.image_url) }
+    if (body.location !== undefined) { fields.push("location = ?"); values.push(body.location) }
+    if (body.status !== undefined) { fields.push("status = ?"); values.push(body.status) }
+
+    // non-like updates require admin/official
+    if (!session || (session.role !== "admin" && session.role !== "official")) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (fields.length === 0) {
+      return NextResponse.json({ success: false, error: "No fields to update" }, { status: 400 })
+    }
+
+    values.push(id)
+    await execute(`UPDATE announcements SET ${fields.join(", ")} WHERE id = ?`, values)
+
+    const updated = await queryOne("SELECT * FROM announcements WHERE id = ?", [id])
+    return NextResponse.json({ success: true, data: updated })
+  } catch (e) {
+    console.error("Announcements PATCH error:", e)
+    return NextResponse.json({ success: false, error: "Failed to update" }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const token = getSessionFromRequest(request.cookies, request.headers)
+    const session = token ? await verifySession(token) : null
+    if (!session || (session.role !== "admin" && session.role !== "official")) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id } = await params
+    await execute("DELETE FROM announcements WHERE id = ?", [id])
+    return NextResponse.json({ success: true, message: "Deleted" })
+  } catch (e) {
+    console.error("Announcements DELETE error:", e)
+    return NextResponse.json({ success: false, error: "Failed to delete" }, { status: 500 })
+  }
+}

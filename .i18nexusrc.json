@@ -1,0 +1,11 @@
+{
+  "project_id": "O0uDbk62O2ZAECTI8OxQhg",
+  "api_key": "O0uDbk62O2ZAECTI8OxQhg",
+  "personal_access_token": "1df0409a-6220-4464-a790-d3b223ee2aeb",
+  "import_format": "i18next",
+  "export_format": "i18next",
+  "languages": ["en", "tl"],
+  "namespaces": ["common"],
+  "base_path": "./public/locales",
+  "output_path": "./public/locales"
+}
