@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
               k.submitted_at as kyc_submitted_at, k.status as kyc_status
        FROM users u
        LEFT JOIN kyc_submissions k ON k.user_id = u.id AND k.status IN ('submitted', 'under_review')
-       WHERE u.role = 'resident'
-       ORDER BY k.submitted_at DESC`
+WHERE u.role = 'resident' AND (u.kyc_status != 'approved')
+        ORDER BY COALESCE(k.submitted_at, u.created_at) DESC`
     )
 
     return NextResponse.json({

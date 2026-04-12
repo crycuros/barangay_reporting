@@ -72,8 +72,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // non-like updates require admin/official
     if (!session || (session.role !== "admin" && session.role !== "official")) {
+      console.log("Unauthorized - session role:", session?.role)
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
+
+    console.log("PATCH announcement:", id, "fields:", fields, "session:", session?.role)
 
     if (fields.length === 0) {
       return NextResponse.json({ success: false, error: "No fields to update" }, { status: 400 })

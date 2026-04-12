@@ -4,10 +4,13 @@ import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("=== Announcements GET ===")
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
+    console.log("Session:", session?.sub, session?.role)
     
     const rows = await queryAll<any>("SELECT * FROM announcements ORDER BY created_at DESC", [])
+    console.log("Found announcements:", rows.length)
     
     // If user is resident, fetch their liked announcements using the standard pattern
     let userLikedAnnouncements: string[] = []
