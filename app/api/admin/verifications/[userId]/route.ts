@@ -16,8 +16,11 @@ export async function PATCH(
   const headers = getCorsHeaders(origin)
   
   try {
+    console.log("=== Verification PATCH START ===")
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
+    console.log("Session:", session?.sub, session?.role)
+    
     if (!session) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
@@ -26,10 +29,10 @@ export async function PATCH(
     }
 
     const { userId } = await params
-    console.log("Verification PATCH - userId:", userId, "action body")
+    console.log("userId from params:", userId)
     
     const body = await request.json()
-    console.log("Verification PATCH - body:", body)
+    console.log("body:", body)
     
     const action = body?.action === "approve" ? "approve" : body?.action === "reject" ? "reject" : null
     const notes = typeof body?.notes === "string" ? body.notes.trim() : null
@@ -38,21 +41,38 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400, headers })
     }
 
+    console.log("Executing action:", action, "for userId:", userId)
+    
     if (action === "approve") {
-      await execute(
-        "UPDATE users SET is_verified = 1, kyc_status = 'approved', kyc_notes = ? WHERE id = ?",
-        [notes || 'Approved', userId]
+      const result = await execute(
+        "UPDATE users SET is_verified = 1, kyc_status = 'approved' WHERE id = ?",
+        [userId]
       )
+      console.log("Approve result:", result)
+      
+      // Also update kyc_submissions if exists
+      await execute(
+        "UPDATE kyc_submissions SET status = 'approved', reviewed_by = ? WHERE user_id = ? AND status = 'submitted'",
+        [session.sub, userId]
+      ).catch(() => {})
     } else {
-      await execute(
-        "UPDATE users SET is_verified = 0, kyc_status = 'rejected', kyc_notes = ? WHERE id = ?",
-        [notes || 'Rejected', userId]
+      const result = await execute(
+        "UPDATE users SET is_verified = 0, kyc_status = 'rejected' WHERE id = ?",
+        [userId]
       )
+      console.log("Reject result:", result)
+      
+      // Also update kyc_submissions if exists
+      await execute(
+        "UPDATE kyc_submissions SET status = 'rejected', reviewed_by = ? WHERE user_id = ? AND status = 'submitted'",
+        [session.sub, userId]
+      ).catch(() => {})
     }
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error("Verification update error:", e)
-    return NextResponse.json({ success: false, error: "Failed to update" }, { status: 500, headers })
+    const errMsg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json({ success: false, error: "Failed to update: " + errMsg }, { status: 500, headers })
   }
 }
