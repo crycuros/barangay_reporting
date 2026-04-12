@@ -835,6 +835,7 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                     <SelectItem value="hazard">Hazard</SelectItem>
                     <SelectItem value="waste">Waste Management</SelectItem>
                     <SelectItem value="infrastructure">Infrastructure</SelectItem>
+                    <SelectItem value="environment">Environmental Issues</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
