@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { validateImage } from '@/lib/image-validation'
 
 interface KYCData {
   full_name: string
@@ -84,11 +85,20 @@ export default function KYCPage() {
 
   const handleFileUpload = async (file: File | null, type: string) => {
     if (!file) return ""
+
+    // AI Image Validation
+    const validation = await validateImage(file, type as any)
     
-    // Check file size
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File too large. Maximum size is 2MB.")
+    if (!validation.valid) {
+      alert(validation.error || 'Invalid image')
       return ""
+    }
+    
+    if (validation.warnings && validation.warnings.length > 0) {
+      const confirm = window.confirm(
+        'Warning: ' + validation.warnings.join(', ') + '\n\nDo you want to continue?'
+      )
+      if (!confirm) return ""
     }
 
     const formData = new FormData()
@@ -456,6 +466,10 @@ function IDDocumentStep({ formData, setFormData, handleFileUpload }: any) {
         label="ID Front Photo *"
         currentValue={formData.id_front_url}
         onChange={async (file) => {
+          if (!file) {
+            setFormData({ ...formData, id_front_url: '' })
+            return
+          }
           const url = await handleFileUpload(file, 'id_front')
           if (url) setFormData({ ...formData, id_front_url: url })
         }}
@@ -465,6 +479,10 @@ function IDDocumentStep({ formData, setFormData, handleFileUpload }: any) {
         label="ID Back Photo *"
         currentValue={formData.id_back_url}
         onChange={async (file) => {
+          if (!file) {
+            setFormData({ ...formData, id_back_url: '' })
+            return
+          }
           const url = await handleFileUpload(file, 'id_back')
           if (url) setFormData({ ...formData, id_back_url: url })
         }}
@@ -508,6 +526,10 @@ function SelfieStep({ formData, setFormData, handleFileUpload }: any) {
         label="Selfie Photo *"
         currentValue={formData.selfie_url}
         onChange={async (file) => {
+          if (!file) {
+            setFormData({ ...formData, selfie_url: '' })
+            return
+          }
           const url = await handleFileUpload(file, 'selfie')
           if (url) setFormData({ ...formData, selfie_url: url })
         }}

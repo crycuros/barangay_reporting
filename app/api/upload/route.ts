@@ -11,6 +11,69 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
+const MIN_WIDTH = 300
+const MIN_HEIGHT = 200
+
+function getImageDimensions(buffer: Buffer): { width: number; height: number } | null {
+  // Check for JPEG
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+    let offset = 2
+    while (offset < buffer.length) {
+      if (buffer[offset] !== 0xFF) break
+      const marker = buffer[offset + 1]
+      // SOF markers
+      if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+        return {
+          height: buffer.readUInt16BE(offset + 5),
+          width: buffer.readUInt16BE(offset + 7)
+        }
+      }
+      const length = buffer.readUInt16BE(offset + 2)
+      offset += 2 + length
+    }
+  }
+  // Check for PNG
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return {
+      width: buffer.readUInt32BE(16),
+      height: buffer.readUInt32BE(20)
+    }
+  }
+  return null
+}
+
+function validateIDImage(width: number, height: number, type: string | null): { valid: boolean; error?: string } {
+  const aspectRatio = width / height
+  
+  // Selfie should be portrait (face)
+  if (type === 'selfie') {
+    if (width < 200 || height < 200) {
+      return { valid: false, error: "Selfie image is too small. Please upload a clearer photo." }
+    }
+    // Selfie can be portrait or square
+    if (aspectRatio > 2) {
+      return { valid: false, error: "Please upload a proper selfie photo (face visible)." }
+    }
+    return { valid: true }
+  }
+  
+  // ID cards should be landscape and have reasonable dimensions
+  if (width < MIN_WIDTH || height < MIN_HEIGHT) {
+    return { valid: false, error: `Image too small. Minimum ${MIN_WIDTH}x${MIN_HEIGHT} pixels required.` }
+  }
+  
+  // ID cards are typically landscape (width > height)
+  if (aspectRatio < 0.5) {
+    return { valid: false, error: "Please upload a landscape ID photo (wide format)." }
+  }
+  
+  // ID cards shouldn't be too wide (usually 1.3 to 2.0 aspect ratio for IDs)
+  if (aspectRatio > 3) {
+    return { valid: false, error: "This doesn't look like an ID card. Please upload a clear ID photo." }
+  }
+  
+  return { valid: true }
+}
 
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
@@ -41,6 +104,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid file type. Only JPEG, PNG, and WebP are allowed." }, { status: 400, headers })
     }
 
+    // Validate image dimensions
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const dimensions = getImageDimensions(buffer)
+    
+    if (!dimensions) {
+      return NextResponse.json({ success: false, error: "Invalid image file. Please upload a valid photo." }, { status: 400, headers })
+    }
+
+    // Validate based on type (ID or selfie)
+    if (type === 'id_front' || type === 'id_back' || type === 'selfie') {
+      const validation = validateIDImage(dimensions.width, dimensions.height, type)
+      if (!validation.valid) {
+        return NextResponse.json({ success: false, error: validation.error }, { status: 400, headers })
+      }
+    }
+
     const uploadDir = path.join(process.cwd(), "public", "uploads", "kyc", userId)
     if (!existsSync(uploadDir)) {
       await mkdir(uploadDir, { recursive: true })
@@ -50,12 +129,11 @@ export async function POST(request: NextRequest) {
     const fileName = `${type || "file"}_${Date.now()}.${ext}`
     const filePath = path.join(uploadDir, fileName)
 
-    const buffer = Buffer.from(await file.arrayBuffer())
     await writeFile(filePath, buffer)
 
     const url = `/uploads/kyc/${userId}/${fileName}`
 
-    console.log("File uploaded:", url)
+    console.log("File uploaded:", url, "Dimensions:", dimensions)
 
     return NextResponse.json({ success: true, data: { url } }, { headers })
   } catch (e) {
