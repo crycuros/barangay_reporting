@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import type { Report, ReportStatus } from "@/lib/types"
-import { FileText, AlertTriangle, Bell, MapPin, Clock, Upload, Rss, Scroll, ThumbsUp, MessageCircle } from "lucide-react"
+import { FileText, AlertTriangle, Bell, MapPin, Clock, Upload, Rss, Scroll, ThumbsUp, MessageCircle, User } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/context"
 import { cn } from "@/lib/utils"
@@ -439,6 +439,15 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
             >
               <FileText className="h-4 w-4 mr-2" />
               {t("submitReport")}
+            </Button>
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => router.push('/resident/profile')}
+              className="shrink-0"
+            >
+              <User className="h-4 w-4 mr-2" />
+              Profile
             </Button>
           </div>
         </section>
