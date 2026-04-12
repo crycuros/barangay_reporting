@@ -26,7 +26,11 @@ export async function PATCH(
     }
 
     const { userId } = await params
+    console.log("Verification PATCH - userId:", userId, "action body")
+    
     const body = await request.json()
+    console.log("Verification PATCH - body:", body)
+    
     const action = body?.action === "approve" ? "approve" : body?.action === "reject" ? "reject" : null
     const notes = typeof body?.notes === "string" ? body.notes.trim() : null
 
@@ -36,13 +40,13 @@ export async function PATCH(
 
     if (action === "approve") {
       await execute(
-        "UPDATE users SET is_verified = 1, kyc_status = 'approved', kyc_notes = ? WHERE id = ? AND role = 'resident'",
-        [notes, userId]
+        "UPDATE users SET is_verified = 1, kyc_status = 'approved', kyc_notes = ? WHERE id = ?",
+        [notes || 'Approved', userId]
       )
     } else {
       await execute(
-        "UPDATE users SET is_verified = 0, kyc_status = 'rejected', kyc_notes = ? WHERE id = ? AND role = 'resident'",
-        [notes, userId]
+        "UPDATE users SET is_verified = 0, kyc_status = 'rejected', kyc_notes = ? WHERE id = ?",
+        [notes || 'Rejected', userId]
       )
     }
 

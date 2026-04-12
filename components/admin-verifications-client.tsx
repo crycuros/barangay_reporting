@@ -73,6 +73,7 @@ export function AdminVerificationsClient() {
 
   const handleAction = async (userId: string, action: "approve" | "reject") => {
     setActioning(userId)
+    console.log("handleAction called:", userId, action)
     try {
       const res = await fetch(`/api/admin/verifications/${userId}`, {
         method: "PATCH",
@@ -80,11 +81,19 @@ export function AdminVerificationsClient() {
         credentials: "same-origin",
         body: JSON.stringify({ action }),
       })
-      if (res.ok) {
+      const data = await res.json()
+      console.log("handleAction response:", res.status, data)
+      if (res.ok && data.success) {
         setUsers((prev) => prev.filter((u) => u.id !== userId))
         setSelectedUser(null)
+        alert(action === "approve" ? "Resident approved!" : "Resident rejected!")
+      } else {
+        alert(data.error || "Failed to update")
       }
-    } catch {}
+    } catch (e) {
+      console.error("handleAction error:", e)
+      alert("Error updating resident")
+    }
     setActioning(null)
   }
 
