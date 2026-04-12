@@ -238,6 +238,12 @@ export default function ReportsPage() {
                 <SelectContent>
                   <SelectItem value="crime">Crime (Emergency)</SelectItem>
                   <SelectItem value="missing_person">Missing Person (Emergency)</SelectItem>
+                  <SelectItem value="fire">Fire (Emergency)</SelectItem>
+                  <SelectItem value="medical">Medical Emergency</SelectItem>
+                  <SelectItem value="disaster">Natural Disaster</SelectItem>
+                  <SelectItem value="assault">Assault</SelectItem>
+                  <SelectItem value="robbery">Robbery</SelectItem>
+                  <SelectItem value="hazard">Hazard</SelectItem>
                   <SelectItem value="waste">Waste Management</SelectItem>
                   <SelectItem value="infrastructure">Infrastructure</SelectItem>
                   <SelectItem value="other">Other</SelectItem>

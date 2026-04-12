@@ -94,7 +94,7 @@ export function DashboardContent() {
   }
 
   const getStatusColor = (status: string, type?: string) => {
-    const isEmergency = type === "crime" || type === "missing-person" || type === "missing_person"
+    const isEmergency = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(type)
     switch (status) {
       case "pending":
         return "destructive"
@@ -309,7 +309,7 @@ export function DashboardContent() {
             <div className="space-y-4">
               {recentReports.length > 0 ? (
                 recentReports.map((report) => {
-                  const isEmergency = report.type === "crime" || report.type === "missing-person" || report.type === "missing_person" || report.status === "pending"
+                  const isEmergency = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(report.type) || report.status === "pending"
                   return (
                     <div 
                       key={report.id} 

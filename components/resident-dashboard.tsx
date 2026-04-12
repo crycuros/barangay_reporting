@@ -329,7 +329,7 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
   }
 
   const getStatusColor = (status: string, type?: string) => {
-    const isEmergency = type === "crime" || type === "missing-person" || type === "missing_person"
+    const isEmergency = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(type)
     switch (status) {
       case "pending": return "destructive"
       case "in-progress": return "default"
@@ -546,7 +546,7 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                       key={`rep-${item.id}`}
                       className={cn(
                         "rounded-xl border bg-card p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md",
-                        (item.data as Report).type === "crime" || (item.data as Report).type === "missing-person" || (item.data as Report).type === "missing_person"
+                        ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes((item.data as Report).type)
                           ? "border-destructive/20 bg-destructive/5"
                           : ""
                       )}
@@ -609,7 +609,7 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                 {reports.length > 0 ? (
                   <div className="space-y-3">
                     {reports.map((report) => {
-                      const isEmerg = report.type === "crime" || report.type === "missing-person" || report.type === "missing_person" || report.status === "pending"
+                      const isEmerg = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(report.type) || report.status === "pending"
                       return (
                         <Card
                           key={report.id}
@@ -827,6 +827,12 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                   <SelectContent>
                     <SelectItem value="crime">Crime & Security (Emergency)</SelectItem>
                     <SelectItem value="missing-person">Missing Person (Emergency)</SelectItem>
+                    <SelectItem value="fire">Fire (Emergency)</SelectItem>
+                    <SelectItem value="medical">Medical Emergency</SelectItem>
+                    <SelectItem value="disaster">Natural Disaster</SelectItem>
+                    <SelectItem value="assault">Assault</SelectItem>
+                    <SelectItem value="robbery">Robbery</SelectItem>
+                    <SelectItem value="hazard">Hazard</SelectItem>
                     <SelectItem value="waste">Waste Management</SelectItem>
                     <SelectItem value="infrastructure">Infrastructure</SelectItem>
                     <SelectItem value="other">Other</SelectItem>

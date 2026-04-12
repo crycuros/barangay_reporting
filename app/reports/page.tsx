@@ -418,7 +418,7 @@ export default function ReportsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {selectedReport?.type === "crime" || selectedReport?.type === "missing-person" ? (
+                      {["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(selectedReport?.type || "") ? (
                         <SelectItem value="pending">Pending</SelectItem>
                       ) : null}
                       <SelectItem value="in-progress">In Progress</SelectItem>
