@@ -153,12 +153,17 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
         credentials: "same-origin",
         body: JSON.stringify(certForm),
       })
-      if (res.ok) {
+      const data = await res.json()
+      if (data.success) {
         setIsCertDialogOpen(false)
         setCertForm({ type: "barangay-clearance", purpose: "" })
         fetchCertificates()
+      } else {
+        alert(data.error || "Failed to submit certificate request")
       }
-    } catch {}
+    } catch (e) {
+      alert("Failed to submit certificate request")
+    }
     setCertSubmitting(false)
   }
 

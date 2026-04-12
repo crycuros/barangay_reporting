@@ -117,6 +117,21 @@ CREATE TABLE IF NOT EXISTS certificates (
   FOREIGN KEY (processed_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Certificate Requests (with purpose field)
+CREATE TABLE IF NOT EXISTS certificate_requests (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  purpose TEXT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  admin_notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  processed_at DATETIME DEFAULT NULL,
+  processed_by INT DEFAULT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (processed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
 -- ============================================
 -- 2. ADDITIONAL TABLES
 -- ============================================
