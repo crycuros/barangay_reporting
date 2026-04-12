@@ -211,8 +211,8 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
           </div>
         </div>
 
-        {/* Admin Status Changer */}
-        {currentUserRole === "admin" && (
+        {/* Status Changer for Admin/Official */}
+        {(currentUserRole === "admin" || currentUserRole === "official") && (
           <div className="flex items-center gap-2 px-1">
             <span className="text-sm font-medium">Change Status:</span>
             <Select value={currentStatus} onValueChange={updateStatus} disabled={updatingStatus}>

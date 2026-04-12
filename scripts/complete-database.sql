@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(255) DEFAULT NULL,
-  role VARCHAR(20) NOT NULL DEFAULT 'resident',
+  role ENUM('resident', 'official', 'admin', 'super_admin') NOT NULL DEFAULT 'resident',
   avatar_url LONGTEXT,
   is_verified BOOLEAN DEFAULT FALSE,
   approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
@@ -210,6 +210,44 @@ CREATE INDEX idx_kyc_log_user ON kyc_activity_log(user_id);
 CREATE INDEX idx_kyc_log_created ON kyc_activity_log(created_at);
 
 -- ============================================
+-- 3b. ADDITIONAL TABLES
+
+-- Notifications table
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  content TEXT,
+  type VARCHAR(50) DEFAULT 'general',
+  is_read TINYINT(1) DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC);
+
+-- Audit Logs table
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  actor_user_id INT,
+  target_user_id INT,
+  action VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(50),
+  entity_id INT,
+  details TEXT,
+  ip_address VARCHAR(45),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_audit_logs_actor ON audit_logs(actor_user_id);
+CREATE INDEX idx_audit_logs_target ON audit_logs(target_user_id);
+CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
+CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+
+-- ============================================
 -- 3. SEED DATA (Sample Data)
 -- ============================================
 
@@ -234,6 +272,30 @@ INSERT INTO reports (type, title, description, location, reporter_name, reporter
   ('infrastructure', 'Broken Streetlight', 'Streetlight near the basketball court is not working.', 'Basketball Court Area', 'Maria Santos', '+63 912 222 2222', 'in-progress'),
   ('other', 'Noise Complaint', 'Loud music from a neighbor during nighttime.', 'Block 5', 'Pedro Reyes', '+63 912 333 3333', 'resolved');
 
+
+-- Run these create statements:
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  content TEXT,
+  type VARCHAR(50) DEFAULT 'general',
+  is_read TINYINT(1) DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  actor_user_id INT,
+  target_user_id INT,
+  action VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(50),
+  entity_id INT,
+  details TEXT,
+  ip_address VARCHAR(45),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 -- ============================================
 -- 4. ADMIN USER (Default Admin Account)
 -- ============================================
@@ -241,3 +303,11 @@ INSERT INTO reports (type, title, description, location, reporter_name, reporter
 -- Default admin credentials:
 -- Email: admin@barangay.gov.ph
 -- Password: admin123
+
+-- ============================================
+-- 5. SUPER ADMIN USER (Highest Authority)
+-- ============================================
+-- Run: node scripts/seed-superadmin.js
+-- Default super_admin credentials:
+-- Email: superadmin@barangay.gov.ph
+-- Password: superadmin123

@@ -28,7 +28,8 @@ export default function KYCPage() {
   const [currentStep, setCurrentStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
+  const [error, setError] = useState<string | null>(null)
+  const [kycStatus, setKycStatus] = useState<string | null>(null)
   const [formData, setFormData] = useState<Partial<KYCData>>({
     gender: 'prefer_not_to_say',
     id_type: 'national_id',
@@ -40,6 +41,8 @@ export default function KYCPage() {
     loadExistingData()
   }, [])
 
+  const isLocked = kycStatus === 'submitted' || kycStatus === 'under_review' || kycStatus === 'approved'
+
   const loadExistingData = async () => {
     setIsLoading(true)
     try {
@@ -50,6 +53,7 @@ export default function KYCPage() {
       
       if (data.success && data.data) {
         setFormData(data.data)
+        setKycStatus(data.data.status)
       }
     } catch (error) {
       console.error('Error loading KYC data:', error)
@@ -59,6 +63,7 @@ export default function KYCPage() {
   }
 
   const saveStepData = async () => {
+    setError(null)
     try {
       const response = await fetch('/api/kyc', {
         method: 'POST',
@@ -67,27 +72,47 @@ export default function KYCPage() {
         body: JSON.stringify({ ...formData, step: currentStep + 1 }),
       })
       
-      if (!response.ok) throw new Error('Failed to save data')
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to save data')
+      }
     } catch (error) {
       console.error('Error saving step:', error)
       throw error
     }
   }
 
-  const handleFileUpload = async (file: File | null, field: string) => {
+  const handleFileUpload = async (file: File | null, type: string) => {
     if (!file) return ""
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const base64 = reader.result as string
-        resolve(base64)
-      }
-      reader.onerror = reject
-      reader.readAsDataURL(file)
+    
+    // Check file size
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File too large. Maximum size is 2MB.")
+      return ""
+    }
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("type", type)
+
+    const response = await fetch("/api/upload", {
+      method: "POST",
+      credentials: "include",
+      body: formData,
     })
+    
+    const data = await response.json()
+    if (data.success && data.data?.url) {
+      return data.data.url
+    }
+    
+    console.error("Upload failed:", data.error)
+    alert("Upload failed: " + data.error)
+    return ""
   }
 
   const handleNext = async () => {
+    setError(null)
     try {
       await saveStepData()
       
@@ -97,12 +122,13 @@ export default function KYCPage() {
         await submitKYC()
       }
     } catch (error) {
-      alert('Error saving data. Please try again.')
+      setError(error instanceof Error ? error.message : 'Error saving data. Please try again.')
     }
   }
 
   const submitKYC = async () => {
     setIsSubmitting(true)
+    setError(null)
     try {
       const response = await fetch('/api/kyc', {
         method: 'PUT',
@@ -117,10 +143,10 @@ export default function KYCPage() {
         alert('KYC submitted successfully! You will be notified once reviewed.')
         router.push('/dashboard')
       } else {
-        alert(data.error || 'Failed to submit KYC')
+        setError(data.error || 'Failed to submit KYC')
       }
     } catch (error) {
-      alert('Error submitting KYC. Please try again.')
+      setError('Error submitting KYC. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -153,7 +179,44 @@ export default function KYCPage() {
           <p className="text-gray-600">Complete your identity verification to access all features</p>
         </div>
 
+        {/* Status Lock Message */}
+        {isLocked && (
+          <div className={`mb-6 p-4 rounded-xl ${
+            kycStatus === 'approved' ? 'bg-green-50 border border-green-200' :
+            kycStatus === 'submitted' || kycStatus === 'under_review' ? 'bg-orange-50 border border-orange-200' :
+            'bg-red-50 border border-red-200'
+          }`}>
+            <div>
+              {kycStatus === 'approved' && (
+                <div>
+                  <p className="font-semibold text-green-800">Your KYC has been approved!</p>
+                  <p className="text-sm text-green-700">You now have full access to all features.</p>
+                </div>
+              )}
+              {(kycStatus === 'submitted' || kycStatus === 'under_review') && (
+                <div>
+                  <p className="font-semibold text-orange-800">Your KYC is under review</p>
+                  <p className="text-sm text-orange-700">You cannot submit a new application while your current submission is being reviewed. Please wait for the review to complete.</p>
+                </div>
+              )}
+              {kycStatus === 'rejected' && (
+                <div>
+                  <p className="font-semibold text-red-800">Your KYC was rejected</p>
+                  <p className="text-sm text-red-700">Please submit a new application with correct information.</p>
+                </div>
+              )}
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 block mx-auto"
+              >
+                Go to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Progress Steps */}
+        {!isLocked && (
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center justify-between mb-8">
             {steps.map((step, index) => (
@@ -189,7 +252,7 @@ export default function KYCPage() {
 
           {/* Navigation Buttons */}
           <div className="flex gap-4 mt-8">
-            {currentStep > 0 && (
+            {currentStep > 0 && !isLocked && (
               <button
                 onClick={() => setCurrentStep(currentStep - 1)}
                 className="flex-1 px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
@@ -199,13 +262,19 @@ export default function KYCPage() {
             )}
             <button
               onClick={handleNext}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLocked}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg disabled:opacity-50"
             >
               {isSubmitting ? 'Submitting...' : currentStep < 3 ? 'Next' : 'Submit for Review'}
             </button>
           </div>
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+              {error}
+            </div>
+          )}
         </div>
+        )}
       </div>
     </div>
   )
@@ -387,8 +456,8 @@ function IDDocumentStep({ formData, setFormData, handleFileUpload }: any) {
         label="ID Front Photo *"
         currentValue={formData.id_front_url}
         onChange={async (file) => {
-          const base64 = await handleFileUpload(file, 'id_front_url')
-          setFormData({ ...formData, id_front_url: base64 })
+          const url = await handleFileUpload(file, 'id_front')
+          if (url) setFormData({ ...formData, id_front_url: url })
         }}
       />
 
@@ -396,8 +465,8 @@ function IDDocumentStep({ formData, setFormData, handleFileUpload }: any) {
         label="ID Back Photo *"
         currentValue={formData.id_back_url}
         onChange={async (file) => {
-          const base64 = await handleFileUpload(file, 'id_back_url')
-          setFormData({ ...formData, id_back_url: base64 })
+          const url = await handleFileUpload(file, 'id_back')
+          if (url) setFormData({ ...formData, id_back_url: url })
         }}
       />
     </div>
@@ -439,8 +508,8 @@ function SelfieStep({ formData, setFormData, handleFileUpload }: any) {
         label="Selfie Photo *"
         currentValue={formData.selfie_url}
         onChange={async (file) => {
-          const base64 = await handleFileUpload(file, 'selfie_url')
-          setFormData({ ...formData, selfie_url: base64 })
+          const url = await handleFileUpload(file, 'selfie')
+          if (url) setFormData({ ...formData, selfie_url: url })
         }}
       />
 
@@ -454,13 +523,14 @@ function SelfieStep({ formData, setFormData, handleFileUpload }: any) {
 }
 
 function FileUploadBox({ label, currentValue, onChange }: any) {
+  const isUrl = currentValue && (currentValue.startsWith("/") || currentValue.startsWith("http"))
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
       <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-500 transition-colors">
         {currentValue ? (
           <div className="space-y-4">
-            <img src={currentValue} alt="Preview" className="max-h-64 mx-auto rounded-lg" />
+            <img src={isUrl ? currentValue : currentValue} alt="Preview" className="max-h-64 mx-auto rounded-lg" />
             <button
               onClick={() => onChange(null)}
               className="text-sm text-red-600 hover:text-red-700 font-medium"

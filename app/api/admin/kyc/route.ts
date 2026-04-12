@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { execute, queryOne, queryAll } from "@/lib/db"
 import { getCorsHeaders } from "@/lib/cors"
+import { isAdmin, canVerifyKYC } from "@/lib/auth/roles"
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
   return new NextResponse(null, { status: 204, headers: getCorsHeaders(origin) })
 }
 
-// GET - Get all KYC submissions (admin only)
+// GET - Get all KYC submissions (admin/super_admin only)
 export async function GET(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
   const headers = getCorsHeaders(origin)
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   try {
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
-    if (!session || session.role !== 'admin') {
+    if (!session || !canVerifyKYC(session.role)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
@@ -35,12 +36,14 @@ export async function GET(request: NextRequest) {
     `
     const params: any[] = []
 
-    if (status) {
+    if (status && status !== 'all') {
       query += ` WHERE k.status = ?`
       params.push(status)
+    } else if (!status || status === 'all') {
+      query += ` WHERE k.status != 'draft'`
     }
 
-    query += ` ORDER BY k.submitted_at DESC, k.created_at DESC`
+    query += ` ORDER BY k.created_at DESC`
 
     const submissions = await queryAll(query, params)
 
@@ -123,12 +126,12 @@ export async function PATCH(request: NextRequest) {
       [userKycStatus, isVerified, submission.user_id]
     )
 
-    // Log activity
-    await execute(
+    // Log activity (optional - silently ignore errors)
+    execute(
       `INSERT INTO kyc_activity_log (kyc_submission_id, user_id, action, actor_id, old_status, new_status, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [submission_id, submission.user_id, action, session.sub, submission.status, newStatus, notes || reason || null]
-    )
+    ).catch(() => {})
 
     return NextResponse.json({ 
       success: true, 

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Barangay System ERD</title>
+  <style>
+    body { 
+      margin: 0; 
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+    }
+    h1 { 
+      color: #1e293b;
+      font-size: 24px;
+      font-weight: bold;
+      margin: 0 0 20px 0;
+    }
+    #erd { 
+      width: 100%;
+    }
+    #erd svg {
+      width: 100% !important;
+      height: auto !important;
+    }
+  </style>
+</head>
+<body>
+  <h1>Barangay System - Database ERD</h1>
+  <div id="erd"></div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  er: {
+    useMaxWidth: true,
+    entitySpacing: 20,
+    minEntitySpacing: 25,
+  },
+  themeVariables: {
+    fontSize: '16px',
+    fontFamily: 'Arial, sans-serif',
+    lineColor: '#3b82f6',
+    primaryColor: '#3b82f6',
+    primaryTextColor: '#1e293b',
+    primaryBorderColor: '#3b82f6',
+    lineColor: '#94a3b8',
+    textColor: '#334155',
+    fill: '#ffffff',
+    stroke: '#3b82f6',
+    strokeWidth: '2px',
+    padding: '12px',
+  },
+  layout: {
+    rankDir: 'LR',
+    nodesep: 15,
+    ranksep: 30,
+  },
+});
+const config = { rankdir: 'LR' };
+const diagram = `erDiagram
+  USERS ||--o{ REPORTS : submits
+  USERS ||--o{ REPORTS : handles
+  USERS ||--o{ ANNOUNCEMENTS : posts
+  USERS ||--o{ ANNOUNCEMENT_LIKES : likes
+  USERS ||--o{ REPORT_MESSAGES : sends
+  USERS ||--o{ KYC_SUBMISSIONS : submits
+  USERS ||--o{ CERTIFICATES : requests
+  USERS ||--o{ NOTIFICATIONS : receives
+  USERS ||--o{ AUDIT_LOGS : performs
+  USERS ||--o| RESIDENT_PROFILES : has
+  USERS ||--o| OFFICIALS : is_staff
+  ANNOUNCEMENTS ||--o{ ANNOUNCEMENT_LIKES : has
+  REPORTS ||--o{ REPORT_MESSAGES : has
+  KYC_SUBMISSIONS ||--o{ KYC_ACTIVITY_LOG : tracked_by
+
+  USERS {
+    int id PK
+    string email UK
+    string full_name
+    string role
+    bool is_verified
+    string status
+  }
+
+  RESIDENT_PROFILES {
+    int id PK
+    int user_id FK
+  }
+
+  OFFICIALS {
+    int id PK
+    string name
+    string position
+  }
+
+  ANNOUNCEMENTS {
+    int id PK
+    string title
+    string author
+    datetime created_at
+  }
+
+  ANNOUNCEMENT_LIKES {
+    int id PK
+    int announcement_id FK
+    int user_id FK
+  }
+
+  REPORTS {
+    int id PK
+    int user_id FK
+    string title
+    string status
+    datetime created_at
+  }
+
+  REPORT_MESSAGES {
+    int id PK
+    int report_id FK
+    int user_id FK
+  }
+
+  KYC_SUBMISSIONS {
+    int id PK
+    int user_id FK
+    string status
+    datetime created_at
+  }
+
+  KYC_ACTIVITY_LOG {
+    int id PK
+    int kyc_submission_id FK
+    string action
+  }
+
+  CERTIFICATES {
+    int id PK
+    int user_id FK
+    string type
+    string status
+  }
+
+  NOTIFICATIONS {
+    int id PK
+    int user_id FK
+  }
+
+  AUDIT_LOGS {
+    int id PK
+    int actor_user_id FK
+    string action
+  }
+`;
+const { svg } = await mermaid.render('erd-svg', diagram);
+document.getElementById('erd').innerHTML = svg;
+const svgEl = document.querySelector('#erd svg');
+if (svgEl) {
+  svgEl.style.maxWidth = 'none';
+  svgEl.style.width = '100%';
+}
+</script>
+</body>
+</html>

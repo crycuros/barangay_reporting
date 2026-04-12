@@ -3,12 +3,14 @@ import bcrypt from "bcryptjs"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { execute, queryOne, queryAll } from "@/lib/db"
 import { getCorsHeaders, handleOptions } from "@/lib/cors"
+import { canManageUsers, isSuperAdmin } from "@/lib/auth/roles"
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
   return handleOptions(origin)
 }
 
+// GET - Get all users (admin only)
 export async function GET(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
   const headers = getCorsHeaders(origin)
@@ -16,7 +18,7 @@ export async function GET(request: NextRequest) {
   try {
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
-    if (!session || session.role !== "admin") {
+    if (!session || !canManageUsers(session.role)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
@@ -64,11 +66,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST - Create new user account
 export async function POST(request: NextRequest) {
   try {
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
-    if (!session || session.role !== "admin") {
+    if (!session || !canManageUsers(session.role)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
@@ -76,11 +79,16 @@ export async function POST(request: NextRequest) {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : ""
     const password = typeof body.password === "string" ? body.password : ""
     const fullName = typeof body.full_name === "string" ? body.full_name.trim() : ""
-    const role = body.role === "official" || body.role === "admin" ? body.role : null
+    const role = body.role === "official" || body.role === "admin" || body.role === "super_admin" ? body.role : null
+
+    // Only super_admin can create admin or super_admin accounts
+    if ((role === "admin" || role === "super_admin") && !isSuperAdmin(session.role)) {
+      return NextResponse.json({ success: false, error: "Only Super Admin can create admin accounts" }, { status: 403 })
+    }
 
     if (!email || !password || !role) {
       return NextResponse.json(
-        { success: false, error: "Email, password, and role (official/admin) are required" },
+        { success: false, error: "Email, password, and role are required" },
         { status: 400 }
       )
     }

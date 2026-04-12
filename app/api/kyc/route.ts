@@ -20,9 +20,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
+    const userId = parseInt(session.sub, 10)
+    if (isNaN(userId)) {
+      return NextResponse.json({ success: false, error: "Invalid user session" }, { status: 400, headers })
+    }
+
     const submission = await queryOne(
       `SELECT * FROM kyc_submissions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
-      [session.sub]
+      [userId]
     )
 
     return NextResponse.json({ success: true, data: submission }, { headers })
@@ -38,13 +43,20 @@ export async function POST(request: NextRequest) {
   const headers = getCorsHeaders(origin)
 
   try {
+    console.log("=== KYC POST START ===")
     const token = getSessionFromRequest(request.cookies, request.headers)
+    console.log("Token:", token ? "present" : "missing")
+    
     const session = token ? await verifySession(token) : null
     if (!session) {
+      console.log("No session")
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
+    console.log("Session verified, sub:", session.sub)
     const body = await request.json()
+    console.log("Body keys:", Object.keys(body))
+
     const {
       step,
       full_name,
@@ -65,11 +77,16 @@ export async function POST(request: NextRequest) {
       selfie_url,
     } = body
 
+    const userId = parseInt(session.sub, 10)
+    console.log("userId parse result:", userId, "isNaN:", isNaN(userId))
+
     // Check if user already has a submission
+    console.log("KYC POST: Checking existing...");
     const existing = await queryOne(
       `SELECT id, status FROM kyc_submissions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
-      [session.sub]
+      [userId]
     )
+    console.log("KYC POST: Existing:", existing)
 
     let submissionId: number
 
@@ -113,15 +130,15 @@ export async function POST(request: NextRequest) {
 
       submissionId = existing.id
 
-      // Log activity
-      await execute(
+      // Log activity (optional - silently ignore errors)
+      execute(
         `INSERT INTO kyc_activity_log (kyc_submission_id, user_id, action, old_status, new_status, notes)
          VALUES (?, ?, 'updated', ?, ?, ?)`,
-        [submissionId, session.sub, existing.status, existing.status, `Updated step ${step || 'unknown'}`]
-      )
+        [submissionId, userId, existing.status, existing.status, `Updated step ${step || 'unknown'}`]
+      ).catch(() => {})
     } else {
       // Create new submission
-      const user = await queryOne(`SELECT email, full_name FROM users WHERE id = ?`, [session.sub])
+      const user = await queryOne(`SELECT email, full_name FROM users WHERE id = ?`, [userId])
       
       const result: any = await execute(
         `INSERT INTO kyc_submissions (
@@ -130,7 +147,7 @@ export async function POST(request: NextRequest) {
           id_type, id_number, id_front_url, id_back_url, selfie_url, status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
         [
-          session.sub,
+          userId,
           full_name || user?.full_name || '',
           user?.email || '',
           phone || null,
@@ -153,12 +170,12 @@ export async function POST(request: NextRequest) {
 
       submissionId = result.insertId
 
-      // Log activity
-      await execute(
+      // Log activity (optional - silently ignore errors)
+      execute(
         `INSERT INTO kyc_activity_log (kyc_submission_id, user_id, action, new_status)
          VALUES (?, ?, 'created', 'draft')`,
-        [submissionId, session.sub]
-      )
+        [submissionId, userId]
+      ).catch(() => {})
     }
 
     // Get updated submission
@@ -167,7 +184,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: submission }, { headers })
   } catch (e) {
     console.error("KYC POST error:", e)
-    return NextResponse.json({ success: false, error: "Failed to save KYC data" }, { status: 500, headers })
+    const errMsg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json({ success: false, error: "Failed to save KYC data: " + errMsg }, { status: 500, headers })
   }
 }
 
@@ -183,9 +201,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
+    const userId = parseInt(session.sub, 10)
+    if (isNaN(userId)) {
+      return NextResponse.json({ success: false, error: "Invalid user session" }, { status: 400, headers })
+    }
+
     const submission = await queryOne(
       `SELECT * FROM kyc_submissions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
-      [session.sub]
+      [userId]
     )
 
     if (!submission) {
@@ -194,7 +217,10 @@ export async function PUT(request: NextRequest) {
 
     // Validate required fields
     const requiredFields = ['full_name', 'phone', 'date_of_birth', 'address_line1', 'id_type', 'id_number', 'id_front_url', 'id_back_url', 'selfie_url']
-    const missingFields = requiredFields.filter(field => !submission[field])
+    const missingFields = requiredFields.filter(field => {
+      const val = submission[field]
+      return !val || (typeof val === 'string' && val.trim() === '')
+    })
 
     if (missingFields.length > 0) {
       return NextResponse.json(
@@ -232,15 +258,15 @@ export async function PUT(request: NextRequest) {
     // Update user kyc_status
     await execute(
       `UPDATE users SET kyc_status = 'pending' WHERE id = ?`,
-      [session.sub]
+      [userId]
     )
 
-    // Log activity
-    await execute(
+    // Log activity (optional - silently ignore errors)
+    execute(
       `INSERT INTO kyc_activity_log (kyc_submission_id, user_id, action, old_status, new_status)
        VALUES (?, ?, 'submitted', 'draft', 'submitted')`,
-      [submission.id, session.sub]
-    )
+      [submission.id, userId]
+    ).catch(() => {})
 
     return NextResponse.json({ success: true, message: "KYC submitted for review" }, { headers })
   } catch (e) {

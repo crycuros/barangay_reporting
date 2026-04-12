@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, ThumbsUp, Image, Smile, MapPin, ChevronDown } from "lucide-react"
+import { Plus, Trash2, ThumbsUp, Image, Smile, MapPin } from "lucide-react"
 import type { Announcement, AnnouncementType } from "@/lib/types"
 
 export default function AnnouncementsPage() {
@@ -351,16 +351,7 @@ export default function AnnouncementsPage() {
             <DialogContent className="max-w-2xl">
               <form onSubmit={handleSubmit}>
                 <DialogHeader>
-                  <DialogTitle className="flex items-center justify-between">
-                    <span>Create Announcement</span>
-                    <div className="flex items-center gap-2">
-                      <button type="button" className="text-sm text-muted-foreground inline-flex items-center gap-1 px-2 py-1 rounded">
-                        <svg className="h-4 w-4 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="8" r="3" /><path d="M21 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/></svg>
-                        <span className="text-xs">Public</span>
-                        <ChevronDown className="h-3 w-3 opacity-70" />
-                      </button>
-                    </div>
-                  </DialogTitle>
+                  <DialogTitle>Create Announcement</DialogTitle>
                   <DialogDescription>Post an update to residents</DialogDescription>
                 </DialogHeader>
 
