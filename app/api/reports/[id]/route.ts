@@ -15,12 +15,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
+    console.log("Report PATCH - session:", session?.sub, session?.role)
     if (!session || (session.role !== "admin" && session.role !== "official")) {
+      console.log("Unauthorized - role:", session?.role)
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
     const { id } = await params
     const body = await request.json()
+    console.log("Report PATCH - updating report:", id, "status:", body.status)
 
     // Get current report status for comparison
     const currentReport = await queryOne<{ status: string }>(
@@ -37,12 +40,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     let newStatus = ""
 
     if (body.status !== undefined) { 
+      const newStatusValue = body.status
+      const currentReportWithType = await queryOne<{ status: string; type: string }>(
+        "SELECT status, type FROM reports WHERE id = ?",
+        [id]
+      )
+      const reportType = currentReportWithType?.type || ""
+      const isEmergencyType = ["crime", "missing_person"].includes(reportType)
+      
+      // Only allow "pending" status for emergency report types
+      if (newStatusValue === "pending" && !isEmergencyType) {
+        return NextResponse.json(
+          { success: false, error: "Pending status is only for emergency reports (crime, missing_person)" },
+          { status: 400, headers }
+        )
+      }
+      
       fields.push("status = ?"); 
-      values.push(body.status);
-      if (currentReport && currentReport.status !== body.status) {
+      values.push(newStatusValue);
+      if (currentReport && currentReport.status !== newStatusValue) {
         statusChanged = true
         oldStatus = currentReport.status
-        newStatus = body.status
+        newStatus = newStatusValue
       }
     }
     if (body.response !== undefined) { fields.push("response = ?"); values.push(body.response) }
