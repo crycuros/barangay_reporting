@@ -110,14 +110,15 @@ export default function ReportsPage() {
     reader.readAsDataURL(file)
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, type?: string) => {
+    const isEmergency = type === "crime" || type === "missing-person"
     switch (status) {
       case "pending":
         return "destructive"
       case "in-progress":
         return "default"
       case "resolved":
-        return "secondary"
+        return isEmergency ? "destructive" : "secondary"
       case "closed":
         return "outline"
       default:
@@ -209,7 +210,7 @@ export default function ReportsPage() {
                           <Badge variant="destructive">Emergency</Badge>
                         )}
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
-                        <Badge variant={getStatusColor(report.status)}>{report.status}</Badge>
+                        <Badge variant={getStatusColor(report.status, report.type)}>{report.status}</Badge>
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>
@@ -417,7 +418,9 @@ export default function ReportsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
+                      {selectedReport?.type === "crime" || selectedReport?.type === "missing-person" ? (
+                        <SelectItem value="pending">Pending</SelectItem>
+                      ) : null}
                       <SelectItem value="in-progress">In Progress</SelectItem>
                       <SelectItem value="resolved">Resolved</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>

@@ -328,11 +328,12 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
     setKycSubmitting(false)
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, type?: string) => {
+    const isEmergency = type === "crime" || type === "missing-person"
     switch (status) {
       case "pending": return "destructive"
       case "in-progress": return "default"
-      case "resolved": return "secondary"
+      case "resolved": return isEmergency ? "destructive" : "secondary"
       case "closed": return "outline"
       default: return "outline"
     }
@@ -562,7 +563,7 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                             </p>
                           </div>
                         </div>
-                        <Badge variant={getStatusColor((item.data as Report).status)} className="shrink-0">
+                        <Badge variant={getStatusColor((item.data as Report).status, (item.data as Report).type)} className="shrink-0">
                           {(item.data as Report).status.replace("-", " ")}
                         </Badge>
                       </div>
@@ -640,7 +641,7 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                                 )}
                               </div>
                               <div className="flex flex-col gap-2">
-                                <Badge variant={getStatusColor(report.status)} className="shrink-0 self-start">
+                                <Badge variant={getStatusColor(report.status, report.type)} className="shrink-0 self-start">
                                   {report.status.replace("-", " ")}
                                 </Badge>
                                 <Button

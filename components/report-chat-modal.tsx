@@ -51,6 +51,8 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   const scrollRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  const isEmergencyReport = report.type === "crime" || report.type === "missing-person"
+
   // Fetch messages
   const fetchMessages = async () => {
     try {
@@ -168,9 +170,10 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             <span>{report.title}</span>
             <Badge variant={
-              currentStatus === 'resolved' ? 'default' :
-              currentStatus === 'in-progress' ? 'secondary' :
-              currentStatus === 'pending' ? 'outline' : 'destructive'
+              currentStatus === 'resolved' && isEmergencyReport ? 'destructive' :
+              currentStatus === 'resolved' ? 'secondary' :
+              currentStatus === 'in-progress' ? 'default' :
+              currentStatus === 'pending' ? 'destructive' : 'outline'
             }>
               {currentStatus}
             </Badge>
@@ -220,7 +223,7 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="pending">Pending</SelectItem>
+                {isEmergencyReport && <SelectItem value="pending">Pending</SelectItem>}
                 <SelectItem value="in-progress">In Progress</SelectItem>
                 <SelectItem value="resolved">Resolved</SelectItem>
                 <SelectItem value="closed">Closed</SelectItem>
@@ -233,7 +236,7 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
         <Separator />
 
         {/* Messages Area */}
-        <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
+        <ScrollArea className="flex-1 min-h-0 pr-4" ref={scrollRef}>
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin" />

@@ -93,18 +93,21 @@ export function DashboardContent() {
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, type?: string) => {
+    const isEmergency = type === "crime" || type === "missing-person"
     switch (status) {
       case "pending":
         return "destructive"
       case "in-progress":
         return "default"
       case "resolved":
-        return "secondary"
+        return isEmergency ? "destructive" : "secondary"
       case "closed":
         return "outline"
       default:
         return "outline"
+    }
+  }
     }
   }
 
@@ -325,7 +328,7 @@ export function DashboardContent() {
                           </div>
                           <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{report.description}</p>
                         </div>
-                        <Badge variant={getStatusColor(report.status)} className="shrink-0">
+                        <Badge variant={getStatusColor(report.status, report.type)} className="shrink-0">
                           {report.status}
                         </Badge>
                       </div>
