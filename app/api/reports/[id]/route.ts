@@ -48,14 +48,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const reportType = currentReportWithType?.type || ""
       const isEmergencyType = ["crime", "missing_person", "missing-person"].includes(reportType)
       
-      // Only allow "pending" status for emergency report types
-      if (newStatusValue === "pending" && !isEmergencyType) {
-        return NextResponse.json(
-          { success: false, error: "Pending status is only for emergency reports (crime, missing_person)" },
-          { status: 400, headers }
-        )
-      }
-      
       fields.push("status = ?"); 
       values.push(newStatusValue);
       if (currentReport && currentReport.status !== newStatusValue) {
