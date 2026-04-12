@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { FileText, Plus, Clock, AlertCircle, CheckCircle } from "lucide-react"
+import { FileText, Plus, Clock, AlertCircle, CheckCircle, MessageCircle } from "lucide-react"
+import { ReportChatModal } from "@/components/report-chat-modal"
 
 interface Report {
   id: string
@@ -31,6 +32,8 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [chatModalOpen, setChatModalOpen] = useState(false)
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -207,6 +210,18 @@ export default function ReportsPage() {
                   <p className="text-xs text-muted-foreground">
                     Submitted: {new Date(report.created_at).toLocaleString()}
                   </p>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="mt-2"
+                    onClick={() => {
+                      setSelectedReport(report)
+                      setChatModalOpen(true)
+                    }}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-1" />
+                    Chat
+                  </Button>
                 </CardContent>
               </Card>
             ))}
@@ -279,6 +294,25 @@ export default function ReportsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {selectedReport && (
+        <ReportChatModal
+          open={chatModalOpen}
+          onOpenChange={setChatModalOpen}
+          report={{
+            id: selectedReport.id,
+            title: selectedReport.title,
+            status: selectedReport.status,
+            type: selectedReport.type,
+            description: selectedReport.description,
+            location: selectedReport.location,
+            reporterName: user?.full_name || "",
+            reporterContact: user?.email || "",
+            createdAt: selectedReport.created_at,
+          }}
+          currentUserRole="resident"
+        />
+      )}
     </div>
   )
 }
