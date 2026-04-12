@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
 
     let type = "", title = "", description = "", location = "", reporterName = "", reporterContact = ""
     let imageData: string | null = null
+    let status = "pending"
 
     const contentType = request.headers.get("content-type") || ""
     if (contentType.includes("multipart/form-data")) {
@@ -98,13 +99,16 @@ export async function POST(request: NextRequest) {
       reporterContact = body.reporterContact || ""
     }
 
+    const isEmergencyType = type === "crime" || type === "missing_person"
+    status = isEmergencyType ? "pending" : "in-progress"
+
     if (!title.trim()) {
       return NextResponse.json({ success: false, error: "Title is required" }, { status: 400, headers })
     }
 
     const result = await execute(
-      "INSERT INTO reports (user_id, type, title, description, location, reporter_name, reporter_contact, status, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
-      [session.sub, type, title, description, location, reporterName, reporterContact, imageData]
+      "INSERT INTO reports (user_id, type, title, description, location, reporter_name, reporter_contact, status, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [session.sub, type, title, description, location, reporterName, reporterContact, status, imageData]
     )
 
     return NextResponse.json({

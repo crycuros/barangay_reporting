@@ -60,7 +60,9 @@ export function AdminHeader() {
         const reportsData = await reportsRes.json()
         const announcementsData = await announcementsRes.json()
 
-        const pendingReports = reportsData?.data?.filter((r: any) => r.status === "pending").length || 0
+        const pendingReports = reportsData?.data?.filter((r: any) => 
+          r.status === "pending" && (r.type === "crime" || r.type === "missing_person" || r.type === "missing-person")
+        ).length || 0
         // Sound alarm for ALL pending reports (not just marked emergency)
         const announcementsEmergencies = announcementsData?.data?.filter((a: any) => a.priority === "urgent" || a.type === "emergency").length || 0
 

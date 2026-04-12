@@ -51,7 +51,7 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   const scrollRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  const isEmergencyReport = report.type === "crime" || report.type === "missing-person"
+  const isEmergencyReport = report.type === "crime" || report.type === "missing-person" || report.type === "missing_person"
 
   // Fetch messages
   const fetchMessages = async () => {

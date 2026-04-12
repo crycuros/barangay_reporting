@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         [id]
       )
       const reportType = currentReportWithType?.type || ""
-      const isEmergencyType = ["crime", "missing_person"].includes(reportType)
+      const isEmergencyType = ["crime", "missing_person", "missing-person"].includes(reportType)
       
       // Only allow "pending" status for emergency report types
       if (newStatusValue === "pending" && !isEmergencyType) {

@@ -236,10 +236,10 @@ export default function ReportsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="crime">Crime</SelectItem>
+                  <SelectItem value="crime">Crime (Emergency)</SelectItem>
+                  <SelectItem value="missing_person">Missing Person (Emergency)</SelectItem>
                   <SelectItem value="waste">Waste Management</SelectItem>
                   <SelectItem value="infrastructure">Infrastructure</SelectItem>
-                  <SelectItem value="missing_person">Missing Person</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
