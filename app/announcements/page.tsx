@@ -197,7 +197,7 @@ export default function AnnouncementsPage() {
           console.log("User authenticated, role:", json.data.role)
           
           // Only fetch announcements if authenticated
-          await fetchAnnouncements()
+          await fetchAnnouncements(true)
         }
       } catch (error) {
         console.error("Auth check error:", error)
@@ -206,9 +206,9 @@ export default function AnnouncementsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const fetchAnnouncements = async () => {
-    // Don't fetch if not authenticated
-    if (!isAuthenticated) {
+  const fetchAnnouncements = async (force = false) => {
+    // Don't fetch if not authenticated (unless forced)
+    if (!isAuthenticated && !force) {
       console.log("Not authenticated, skipping fetch")
       return
     }
