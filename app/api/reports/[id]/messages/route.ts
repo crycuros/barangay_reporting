@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { execute, queryAll } from "@/lib/db"
 import { getCorsHeaders, handleOptions } from "@/lib/cors"
+import { publishEvent } from "@/lib/server/realtime"
+
+async function ensureReportMessagesTable() {
+  await execute(
+    `CREATE TABLE IF NOT EXISTS report_messages (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      report_id INT NOT NULL,
+      user_id INT NULL,
+      message TEXT NOT NULL,
+      is_system_message BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+      INDEX idx_report_id (report_id),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    []
+  )
+}
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
@@ -17,6 +36,7 @@ export async function GET(
   const headers = getCorsHeaders(origin)
 
   try {
+    await ensureReportMessagesTable()
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
     if (!session) {
@@ -55,7 +75,7 @@ export async function GET(
     )
 
     // Mark messages as read based on user role
-    if (session.role === 'admin') {
+    if (session.role === 'admin' || session.role === 'official') {
       await execute(
         "UPDATE reports SET unread_by_admin = FALSE WHERE id = ?",
         [reportId]
@@ -96,6 +116,7 @@ export async function POST(
   const headers = getCorsHeaders(origin)
 
   try {
+    await ensureReportMessagesTable()
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
     if (!session) {
@@ -114,11 +135,11 @@ export async function POST(
     await execute(
       `INSERT INTO report_messages (report_id, user_id, message, is_system_message) 
        VALUES (?, ?, ?, FALSE)`,
-      [reportId, session.userId, message.trim()]
+      [reportId, session.sub ?? null, message.trim()]
     )
 
     // Update report's last_message_at and unread flags
-    if (session.role === 'admin') {
+    if (session.role === 'admin' || session.role === 'official') {
       // Admin sent message, mark as unread for resident
       await execute(
         `UPDATE reports 
@@ -135,6 +156,8 @@ export async function POST(
         [reportId]
       )
     }
+
+    publishEvent("reports.updated", { action: "message_sent", id: String(reportId) })
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

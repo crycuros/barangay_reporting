@@ -21,11 +21,52 @@ export async function GET(request: NextRequest) {
     }
 
     // If user is admin, fetch all reports, otherwise fetch only user's reports
-    let query = "SELECT * FROM reports"
+    let query = `SELECT 
+      r.*,
+      (
+        SELECT COUNT(*)
+        FROM report_messages rm
+        LEFT JOIN users u ON u.id = rm.user_id
+        WHERE rm.report_id = r.id
+          AND rm.is_system_message = FALSE
+          AND u.role IN ('admin', 'official')
+          AND rm.created_at > COALESCE(
+            (
+              SELECT MAX(rm2.created_at)
+              FROM report_messages rm2
+              LEFT JOIN users u2 ON u2.id = rm2.user_id
+              WHERE rm2.report_id = r.id
+                AND rm2.is_system_message = FALSE
+                AND u2.role = 'resident'
+            ),
+            '1970-01-01 00:00:00'
+          )
+      ) AS unread_resident_count
+      ,
+      (
+        SELECT COUNT(*)
+        FROM report_messages rm
+        LEFT JOIN users u ON u.id = rm.user_id
+        WHERE rm.report_id = r.id
+          AND rm.is_system_message = FALSE
+          AND u.role = 'resident'
+          AND rm.created_at > COALESCE(
+            (
+              SELECT MAX(rm2.created_at)
+              FROM report_messages rm2
+              LEFT JOIN users u2 ON u2.id = rm2.user_id
+              WHERE rm2.report_id = r.id
+                AND rm2.is_system_message = FALSE
+                AND u2.role IN ('admin', 'official')
+            ),
+            '1970-01-01 00:00:00'
+          )
+      ) AS unread_admin_count
+    FROM reports r`
     let params: any[] = []
     
     if (session.role !== 'admin') {
-      query += " WHERE user_id = ?"
+      query += " WHERE r.user_id = ?"
       params.push(session.sub) // session.sub is the user ID
     }
     
@@ -52,6 +93,8 @@ export async function GET(request: NextRequest) {
         images: r.image_url ? [r.image_url] : [],
         unreadByAdmin: Boolean((r as any).unread_by_admin),
         unreadByResident: Boolean((r as any).unread_by_resident),
+        unreadReplyCount: Number((r as any).unread_resident_count) || 0,
+        unreadAdminReplyCount: Number((r as any).unread_admin_count) || 0,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       })),

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Mail } from "lucide-react"
 import type { Official } from "@/lib/types"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 export default function OfficialsPage() {
   const [officials, setOfficials] = useState<Official[]>([])
@@ -17,6 +18,33 @@ export default function OfficialsPage() {
 
   useEffect(() => {
     fetchOfficials()
+  }, [])
+
+  useEffect(() => {
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
+        if (parsed?.type === "officials.updated" || parsed?.type === "users.updated") {
+          fetchOfficials()
+        }
+      },
+    })
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchOfficials()
+      }
+    }
+    const interval = window.setInterval(refresh, 3000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
   }, [])
 
   const fetchOfficials = async () => {

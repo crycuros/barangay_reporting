@@ -25,6 +25,7 @@ import { useLanguage } from "@/lib/i18n/context"
 import { cn } from "@/lib/utils"
 import { DashboardSkeleton, HeaderSkeleton } from "@/components/skeleton-loader"
 import { ReportChatModal } from "@/components/report-chat-modal"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 const EMERGENCY_REPORT_TYPES = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"]
 
@@ -117,6 +118,41 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
     }
     
     loadData()
+  }, [])
+
+  useEffect(() => {
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
+        if (parsed?.type === "announcements.updated") {
+          fetchAnnouncements()
+        }
+        if (parsed?.type === "reports.updated") {
+          fetchUserReports()
+        }
+        if (parsed?.type === "certificates.updated") {
+          fetchCertificates()
+        }
+      },
+    })
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchAnnouncements()
+        fetchUserReports()
+        fetchCertificates()
+      }
+    }
+    const interval = window.setInterval(refresh, 3000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
   }, [])
 
   useEffect(() => {
@@ -640,10 +676,18 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                         <Card
                           key={report.id}
                           className={cn(
-                            "overflow-hidden transition-shadow hover:shadow-md",
+                            "relative overflow-hidden transition-shadow hover:shadow-md",
                             isEmerg && "border-destructive/30 bg-destructive/5"
                           )}
                         >
+                          {report.unreadByResident && (
+                            <div className="absolute -top-2 -left-2 z-10">
+                              <Badge className="text-[10px] bg-blue-600 text-white flex items-center gap-1 shadow-sm">
+                                <MessageCircle className="h-3 w-3" />
+                                {report.unreadReplyCount && report.unreadReplyCount > 0 ? report.unreadReplyCount : 1}
+                              </Badge>
+                            </div>
+                          )}
                           <CardContent className="p-4">
                             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                               <div className="flex-1 min-w-0">

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Bell, Scroll, User, ArrowRight, AlertTriangle } from "lucide-react"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 export default function ResidentPage() {
   const router = useRouter()
@@ -20,6 +21,37 @@ export default function ResidentPage() {
 
   useEffect(() => {
     loadData()
+  }, [])
+
+  useEffect(() => {
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
+        if (
+          parsed?.type === "announcements.updated" ||
+          parsed?.type === "reports.updated" ||
+          parsed?.type === "certificates.updated"
+        ) {
+          loadData()
+        }
+      },
+    })
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        loadData()
+      }
+    }
+    const interval = window.setInterval(refresh, 3000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
   }, [])
 
   const loadData = async () => {

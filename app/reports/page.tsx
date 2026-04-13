@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth/context"
 import { cn } from "@/lib/utils"
 import { ReportChatModal } from "@/components/report-chat-modal"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 const EMERGENCY_REPORT_TYPES = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"]
 
@@ -47,11 +48,15 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      fetchReports()
-    }, 4000)
+      if (document.visibilityState === "visible") {
+        fetchReports()
+      }
+    }, 3000)
 
     const onFocus = () => {
-      fetchReports()
+      if (document.visibilityState === "visible") {
+        fetchReports()
+      }
     }
 
     window.addEventListener("focus", onFocus)
@@ -65,18 +70,14 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
-    const es = new EventSource("/api/events")
-    es.addEventListener("update", (event) => {
-      try {
-        const parsed = JSON.parse((event as MessageEvent).data)
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
         if (parsed?.type === "reports.updated") {
           fetchReports()
         }
-      } catch {
-        // noop
-      }
+      },
     })
-    return () => es.close()
+    return cleanup
   }, [])
 
   const parseJsonSafe = async (res: Response) => {
@@ -240,11 +241,19 @@ export default function ReportsPage() {
               <Card
                 key={report.id}
                 className={cn(
-                  "cursor-pointer hover:bg-accent/50 transition-colors",
+                  "relative cursor-pointer hover:bg-accent/50 transition-colors",
                   isEmergency && "border-destructive/50 bg-destructive/5"
                 )}
                 onClick={() => openReportDialog(report)}
               >
+                {report.unreadByAdmin && (
+                  <div className="absolute -top-2 -left-2 z-10">
+                    <Badge className="bg-blue-600 text-white flex items-center gap-1 shadow-sm">
+                      <MessageCircle className="h-3 w-3" />
+                      {report.unreadAdminReplyCount && report.unreadAdminReplyCount > 0 ? report.unreadAdminReplyCount : 1}
+                    </Badge>
+                  </div>
+                )}
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1 flex-1">
@@ -255,7 +264,6 @@ export default function ReportsPage() {
                         )}
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
                         <Badge variant="outline" className={getStatusBadgeClass(report.status, report.type)}>{getStatusLabel(report.status, report.type)}</Badge>
-                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>
@@ -296,11 +304,19 @@ export default function ReportsPage() {
               <Card
                 key={report.id}
                 className={cn(
-                  "cursor-pointer hover:bg-accent/50 transition-colors",
+                  "relative cursor-pointer hover:bg-accent/50 transition-colors",
                   isEmergency && "border-destructive/50 bg-destructive/5"
                 )}
                 onClick={() => openReportDialog(report)}
               >
+                {report.unreadByAdmin && (
+                  <div className="absolute -top-2 -left-2 z-10">
+                    <Badge className="bg-blue-600 text-white flex items-center gap-1 shadow-sm">
+                      <MessageCircle className="h-3 w-3" />
+                      {report.unreadAdminReplyCount && report.unreadAdminReplyCount > 0 ? report.unreadAdminReplyCount : 1}
+                    </Badge>
+                  </div>
+                )}
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1 flex-1">
@@ -310,7 +326,6 @@ export default function ReportsPage() {
                           <Badge variant="destructive">Emergency</Badge>
                         )}
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
-                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>
@@ -342,9 +357,17 @@ export default function ReportsPage() {
             {filterReports("in-progress").map((report) => (
               <Card
                 key={report.id}
-                className="cursor-pointer hover:bg-accent/50 transition-colors"
+                className="relative cursor-pointer hover:bg-accent/50 transition-colors"
                 onClick={() => openReportDialog(report)}
               >
+                {report.unreadByAdmin && (
+                  <div className="absolute -top-2 -left-2 z-10">
+                    <Badge className="bg-blue-600 text-white flex items-center gap-1 shadow-sm">
+                      <MessageCircle className="h-3 w-3" />
+                      {report.unreadAdminReplyCount && report.unreadAdminReplyCount > 0 ? report.unreadAdminReplyCount : 1}
+                    </Badge>
+                  </div>
+                )}
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1 flex-1">
@@ -352,7 +375,6 @@ export default function ReportsPage() {
                         <CardTitle className="text-lg">{report.title}</CardTitle>
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
                         <Badge variant="outline" className={getStatusBadgeClass(report.status, report.type)}>{getStatusLabel(report.status, report.type)}</Badge>
-                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>
@@ -389,9 +411,17 @@ export default function ReportsPage() {
             {filterReports("resolved").map((report) => (
               <Card
                 key={report.id}
-                className="cursor-pointer hover:bg-accent/50 transition-colors"
+                className="relative cursor-pointer hover:bg-accent/50 transition-colors"
                 onClick={() => openReportDialog(report)}
               >
+                {report.unreadByAdmin && (
+                  <div className="absolute -top-2 -left-2 z-10">
+                    <Badge className="bg-blue-600 text-white flex items-center gap-1 shadow-sm">
+                      <MessageCircle className="h-3 w-3" />
+                      {report.unreadAdminReplyCount && report.unreadAdminReplyCount > 0 ? report.unreadAdminReplyCount : 1}
+                    </Badge>
+                  </div>
+                )}
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1 flex-1">
@@ -399,7 +429,6 @@ export default function ReportsPage() {
                         <CardTitle className="text-lg">{report.title}</CardTitle>
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
                         <Badge variant="outline" className={getStatusBadgeClass(report.status, report.type)}>{getStatusLabel(report.status, report.type)}</Badge>
-                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>

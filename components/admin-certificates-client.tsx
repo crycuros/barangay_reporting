@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 type CertRequest = {
   id: string
@@ -78,18 +79,32 @@ export function AdminCertificatesClient() {
   useEffect(() => { fetchRequests() }, [])
 
   useEffect(() => {
-    const es = new EventSource("/api/events")
-    es.addEventListener("update", (event) => {
-      try {
-        const parsed = JSON.parse((event as MessageEvent).data)
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
         if (parsed?.type === "certificates.updated") {
           fetchRequests()
         }
-      } catch {
-        // noop
-      }
+      },
     })
-    return () => es.close()
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchRequests()
+      }
+    }
+
+    const interval = window.setInterval(refresh, 3000)
+    document.addEventListener("visibilitychange", refresh)
+    window.addEventListener("focus", refresh)
+
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", refresh)
+      window.removeEventListener("focus", refresh)
+    }
   }, [])
 
   const fetchRequests = async () => {

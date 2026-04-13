@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Scroll, Plus, Download, Clock, CheckCircle } from "lucide-react"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 interface Certificate {
   id: string
@@ -39,18 +40,30 @@ export default function CertificatesPage() {
   }, [])
 
   useEffect(() => {
-    const es = new EventSource("/api/events")
-    es.addEventListener("update", (event) => {
-      try {
-        const parsed = JSON.parse((event as MessageEvent).data)
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
         if (parsed?.type === "certificates.updated") {
           loadData()
         }
-      } catch {
-        // noop
-      }
+      },
     })
-    return () => es.close()
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        loadData()
+      }
+    }
+    const interval = window.setInterval(refresh, 3000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
   }, [])
 
   const loadData = async () => {

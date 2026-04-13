@@ -139,7 +139,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       await execute(
         `INSERT INTO report_messages (report_id, user_id, message, is_system_message) 
          VALUES (?, ?, ?, FALSE)`,
-        [id, session.userId, body.response]
+        [id, session.sub ?? null, body.response]
       )
 
       // Mark as unread for resident

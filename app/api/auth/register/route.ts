@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { execute, queryOne } from "@/lib/db"
 import { createSession, getSessionCookieName } from "@/lib/auth/session"
 import { corsHeaders } from "@/lib/cors"
+import { publishEvent } from "@/lib/server/realtime"
 
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { headers: corsHeaders })
@@ -96,7 +97,9 @@ export async function POST(request: NextRequest) {
         "INSERT INTO officials (name, position, department, contact, email, is_active) VALUES (?, ?, ?, ?, ?, ?)",
         [fullName || email, "Barangay Official", department, phone || "", email, 0]
       ).catch(() => {})
+      publishEvent("officials.updated", { action: "registered_pending", userId: String(userResult.id) })
     }
+    publishEvent("users.updated", { action: "registered", role, userId: String(userResult.id) })
 
     const res = NextResponse.json({
       success: true,

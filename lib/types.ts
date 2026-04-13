@@ -33,6 +33,8 @@ export interface Report {
   images?: string[]
   unreadByAdmin?: boolean
   unreadByResident?: boolean
+  unreadReplyCount?: number
+  unreadAdminReplyCount?: number
 }
 
 export interface Official {

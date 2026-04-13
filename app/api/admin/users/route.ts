@@ -4,6 +4,7 @@ import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { execute, queryOne, queryAll } from "@/lib/db"
 import { getCorsHeaders, handleOptions } from "@/lib/cors"
 import { canManageUsers, isSuperAdmin } from "@/lib/auth/roles"
+import { publishEvent } from "@/lib/server/realtime"
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
@@ -116,6 +117,8 @@ export async function POST(request: NextRequest) {
       role,
       approvalStatus,
     ])
+    publishEvent("officials.updated", { action: "created", role })
+    publishEvent("users.updated", { action: "created", role })
 
     return NextResponse.json({ success: true })
   } catch (e) {

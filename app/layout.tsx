@@ -5,6 +5,8 @@ import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth/context'
 import { LanguageProvider } from '@/lib/i18n/context'
+import { Toaster } from '@/components/ui/toaster'
+import { RealtimeAlerts } from '@/components/realtime-alerts'
 
 export const metadata: Metadata = {
   title: 'v0 App',
@@ -23,6 +25,8 @@ export default function RootLayout({
         <AuthProvider>
           <LanguageProvider>
             {children}
+            <RealtimeAlerts />
+            <Toaster />
             <Analytics />
           </LanguageProvider>
         </AuthProvider>

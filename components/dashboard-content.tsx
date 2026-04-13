@@ -11,6 +11,7 @@ import { Megaphone, Users, AlertTriangle, Clock, FileText, TrendingUp, UserCheck
 import type { Announcement, Report } from "@/lib/types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 interface Stats {
   announcements: { total: number; active: number }
@@ -29,6 +30,43 @@ export function DashboardContent() {
     fetchStats()
     fetchAnnouncements()
     fetchReports()
+  }, [])
+
+  useEffect(() => {
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
+        if (
+          parsed?.type === "announcements.updated" ||
+          parsed?.type === "reports.updated" ||
+          parsed?.type === "certificates.updated" ||
+          parsed?.type === "officials.updated" ||
+          parsed?.type === "users.updated"
+        ) {
+          fetchStats()
+          fetchAnnouncements()
+          fetchReports()
+        }
+      },
+    })
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchStats()
+        fetchAnnouncements()
+        fetchReports()
+      }
+    }
+    const interval = window.setInterval(refresh, 3000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
   }, [])
 
   const fetchStats = async () => {

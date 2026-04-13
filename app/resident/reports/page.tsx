@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { FileText, Plus, Clock, AlertCircle, CheckCircle, MessageCircle } from "lucide-react"
 import { ReportChatModal } from "@/components/report-chat-modal"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 interface Report {
   id: string
@@ -23,6 +24,8 @@ interface Report {
   status: string
   created_at: string
   response?: string
+  unreadByResident?: boolean
+  unreadReplyCount?: number
 }
 
 export default function ReportsPage() {
@@ -47,11 +50,15 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      loadData()
-    }, 4000)
+      if (document.visibilityState === "visible") {
+        loadData()
+      }
+    }, 3000)
 
     const onFocus = () => {
-      loadData()
+      if (document.visibilityState === "visible") {
+        loadData()
+      }
     }
 
     window.addEventListener('focus', onFocus)
@@ -65,18 +72,14 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
-    const es = new EventSource("/api/events")
-    es.addEventListener("update", (event) => {
-      try {
-        const parsed = JSON.parse((event as MessageEvent).data)
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
         if (parsed?.type === "reports.updated") {
           loadData()
         }
-      } catch {
-        // noop
-      }
+      },
     })
-    return () => es.close()
+    return cleanup
   }, [])
 
   const loadData = async () => {
@@ -210,7 +213,15 @@ export default function ReportsPage() {
         ) : (
           <div className="space-y-4">
             {reports.map((report) => (
-              <Card key={report.id}>
+              <Card key={report.id} className={`relative ${report.unreadByResident ? "border-blue-300 bg-blue-50/30" : ""}`}>
+                {report.unreadByResident && (
+                  <div className="absolute -top-2 -left-2 z-10">
+                    <Badge className="bg-blue-600 text-white flex items-center gap-1 shadow-sm">
+                      <MessageCircle className="h-3 w-3" />
+                      {report.unreadReplyCount && report.unreadReplyCount > 0 ? report.unreadReplyCount : 1}
+                    </Badge>
+                  </div>
+                )}
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">

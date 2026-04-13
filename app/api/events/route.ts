@@ -1,34 +1,62 @@
 import { NextRequest } from "next/server"
 import { subscribeEvents } from "@/lib/server/realtime"
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   const encoder = new TextEncoder()
+  let closed = false
+  let unsubscribe: (() => void) | null = null
+  let keepAlive: ReturnType<typeof setInterval> | null = null
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null
+
+  const closeStream = () => {
+    if (closed) return
+    closed = true
+    if (keepAlive) {
+      clearInterval(keepAlive)
+      keepAlive = null
+    }
+    if (unsubscribe) {
+      unsubscribe()
+      unsubscribe = null
+    }
+    try {
+      controllerRef?.close()
+    } catch {
+      // no-op (already closed)
+    }
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      controllerRef = controller
+
       const send = (event: string, data: unknown) => {
-        controller.enqueue(encoder.encode(`event: ${event}\n`))
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+        if (closed) return
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\n`))
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+        } catch {
+          closeStream()
+        }
       }
 
       send("connected", { ok: true, ts: Date.now() })
 
-      const unsubscribe = subscribeEvents((evt) => {
+      unsubscribe = subscribeEvents((evt) => {
         send("update", evt)
       })
 
-      const keepAlive = setInterval(() => {
+      keepAlive = setInterval(() => {
         send("ping", { ts: Date.now() })
       }, 25000)
-
-      return () => {
-        clearInterval(keepAlive)
-        unsubscribe()
-      }
     },
     cancel() {
-      // handled by start cleanup
+      closeStream()
     },
+  })
+
+  request.signal.addEventListener("abort", () => {
+    closeStream()
   })
 
   return new Response(stream, {

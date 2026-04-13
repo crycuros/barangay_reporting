@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useEffect, useState, useRef } from "react"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 export function AdminHeader() {
   const router = useRouter()
@@ -80,7 +81,6 @@ export function AdminHeader() {
     fetchNotificationsRef.current = fetchNotifications
 
     fetchNotifications()
-    const interval = setInterval(fetchNotifications, 5000) // Refresh every 5s for near-realtime
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -97,11 +97,39 @@ export function AdminHeader() {
     window.addEventListener("announcements:updated", handleExternal)
 
     return () => {
-      clearInterval(interval)
       document.removeEventListener("visibilitychange", handleVisibility)
       window.removeEventListener("reports:updated", handleExternal)
       window.removeEventListener("announcements:updated", handleExternal)
     }
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        try { fetchNotificationsRef.current && fetchNotificationsRef.current() } catch {}
+      }
+    }
+    const interval = window.setInterval(refresh, 3000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
+  }, [])
+
+  useEffect(() => {
+    const cleanup = connectRealtimeEvents({
+      onUpdate: () => {
+        try {
+          fetchNotificationsRef.current && fetchNotificationsRef.current()
+        } catch {
+          // noop
+        }
+      },
+    })
+    return cleanup
   }, [])
 
   // Play a short alert tone repeatedly while there are pending emergency REPORTS.

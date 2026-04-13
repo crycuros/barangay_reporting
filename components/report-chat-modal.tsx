@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 interface Message {
   id: string
@@ -60,27 +61,29 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   const [currentStatus, setCurrentStatus] = useState(report.status)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const scrollAreaContainerRef = useRef<HTMLDivElement>(null)
 
   const isEmergencyReport = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(report.type)
   const isFinalStatus = currentStatus === "closed"
+
+  const scrollToBottom = () => {
+    const viewport = scrollAreaContainerRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight
+    }
+  }
 
   // Fetch messages
   const fetchMessages = async () => {
     try {
       const res = await fetch(`/api/reports/${report.id}/messages`, {
-        credentials: "same-origin"
+        credentials: "same-origin",
+        cache: "no-store",
       })
       const data = await res.json()
       if (data.success) {
         setMessages(data.data)
-        // Auto-scroll to bottom
-        setTimeout(() => {
-          if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-          }
-        }, 100)
+        setTimeout(scrollToBottom, 50)
       }
     } catch (error) {
       console.error("Failed to fetch messages:", error)
@@ -92,18 +95,22 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
     if (!newMessage.trim()) return
 
     setSending(true)
+    const messageToSend = newMessage.trim()
     try {
       const res = await fetch(`/api/reports/${report.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ message: newMessage.trim() })
+        body: JSON.stringify({ message: messageToSend })
       })
 
       if (res.ok) {
         setNewMessage("")
-        await fetchMessages()
+      } else {
+        const data = await res.json().catch(() => null)
+        alert(data?.error || "Failed to send message")
       }
+      await fetchMessages()
     } catch (error) {
       console.error("Failed to send message:", error)
     } finally {
@@ -150,27 +157,33 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
     setCurrentStatus(report.status)
   }, [report.id, report.status])
 
-  // Start polling when modal opens
+  // Initial fetch when modal opens
   useEffect(() => {
     if (open) {
       setLoading(true)
       fetchMessages().finally(() => setLoading(false))
-      
-      // Poll every 5 seconds
-      pollIntervalRef.current = setInterval(fetchMessages, 5000)
-    } else {
-      // Stop polling when modal closes
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-        pollIntervalRef.current = null
-      }
     }
+  }, [open, report.id])
 
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-      }
+  useEffect(() => {
+    if (open) {
+      setTimeout(scrollToBottom, 50)
     }
+  }, [messages, open])
+
+  // Live updates via SSE
+  useEffect(() => {
+    if (!open) return
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
+        if (parsed?.type !== "reports.updated") return
+        const targetId = String(parsed?.payload?.id ?? parsed?.id ?? "")
+        if (targetId && targetId === String(report.id)) {
+          fetchMessages()
+        }
+      },
+    })
+    return cleanup
   }, [open, report.id])
 
   const getMessageAlignment = (msg: Message) => {
@@ -268,7 +281,8 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
         <Separator />
 
         {/* Messages Area */}
-        <ScrollArea className="flex-1 min-h-0 pr-4" ref={scrollRef}>
+        <div ref={scrollAreaContainerRef} className="flex-1 min-h-0">
+        <ScrollArea className="h-full pr-4">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -306,6 +320,7 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
             </div>
           )}
         </ScrollArea>
+        </div>
 
         {/* Input Area */}
         <div className="border-t pt-4 flex gap-2">

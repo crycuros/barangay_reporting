@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2, ThumbsUp, Image, Smile, MapPin } from "lucide-react"
 import type { Announcement, AnnouncementType } from "@/lib/types"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 
 const isRenderableAnnouncementImage = (value: unknown): value is string => {
   if (typeof value !== "string") return false
@@ -233,18 +234,32 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) return
-    const es = new EventSource("/api/events")
-    es.addEventListener("update", (event) => {
-      try {
-        const parsed = JSON.parse((event as MessageEvent).data)
+    const cleanup = connectRealtimeEvents({
+      onUpdate: (parsed) => {
         if (parsed?.type === "announcements.updated") {
           fetchAnnouncements(true)
         }
-      } catch {
-        // noop
-      }
+      },
     })
-    return () => es.close()
+    return cleanup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchAnnouncements(true)
+      }
+    }
+    const interval = window.setInterval(refresh, 3000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated])
 

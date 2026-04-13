@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { execute } from "@/lib/db"
 import { getCorsHeaders, handleOptions } from "@/lib/cors"
+import { publishEvent } from "@/lib/server/realtime"
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
@@ -41,6 +42,8 @@ export async function PATCH(
         [userId]
       )
     }
+    publishEvent("officials.updated", { action, userId: String(userId) })
+    publishEvent("users.updated", { action, userId: String(userId) })
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
