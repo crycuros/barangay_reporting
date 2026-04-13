@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { queryAll, execute } from "@/lib/db"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { getCorsHeaders, handleOptions } from "@/lib/cors"
+import { publishEvent } from "@/lib/server/realtime"
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
@@ -49,6 +50,8 @@ export async function GET(request: NextRequest) {
         status: r.status,
         response: r.response,
         images: r.image_url ? [r.image_url] : [],
+        unreadByAdmin: Boolean((r as any).unread_by_admin),
+        unreadByResident: Boolean((r as any).unread_by_resident),
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       })),
@@ -107,9 +110,10 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await execute(
-      "INSERT INTO reports (user_id, type, title, description, location, reporter_name, reporter_contact, status, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [session.sub, type, title, description, location, reporterName, reporterContact, status, imageData]
+      "INSERT INTO reports (user_id, type, title, description, location, reporter_name, reporter_contact, status, image_url, unread_by_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [session.sub, type, title, description, location, reporterName, reporterContact, status, imageData, 1]
     )
+    publishEvent("reports.updated", { action: "created", id: String(result.insertId) })
 
     return NextResponse.json({
       success: true,

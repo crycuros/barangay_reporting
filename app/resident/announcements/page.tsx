@@ -6,7 +6,7 @@ import { ResidentHeader } from "@/components/resident-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Bell, ThumbsUp, MessageCircle, AlertTriangle } from "lucide-react"
+import { Bell, ThumbsUp, AlertTriangle } from "lucide-react"
 
 interface Announcement {
   id: string
@@ -18,6 +18,16 @@ interface Announcement {
   author: string
   imageUrl?: string | null
   likes?: number
+  status?: string
+}
+
+const isRenderableAnnouncementImage = (value: unknown): value is string => {
+  if (typeof value !== "string") return false
+  const src = value.trim()
+  if (!src) return false
+  if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("/")) return true
+  if (!src.startsWith("data:image/")) return false
+  return /^data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/.test(src.replace(/\s+/g, ""))
 }
 
 export default function AnnouncementsPage() {
@@ -29,6 +39,21 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     loadData()
+  }, [])
+
+  useEffect(() => {
+    const es = new EventSource("/api/events")
+    es.addEventListener("update", (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent).data)
+        if (parsed?.type === "announcements.updated") {
+          loadData()
+        }
+      } catch {
+        // noop
+      }
+    })
+    return () => es.close()
   }, [])
 
   const loadData = async () => {
@@ -149,59 +174,66 @@ export default function AnnouncementsPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {announcements.map((announcement) => (
-              <Card key={announcement.id} className={announcement.priority === 'urgent' ? 'border-red-300 bg-red-50/50' : ''}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        {announcement.priority === 'urgent' && (
-                          <AlertTriangle className="h-5 w-5 text-red-600" />
-                        )}
-                        <CardTitle>{announcement.title}</CardTitle>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={announcement.type === 'emergency' ? 'destructive' : 'secondary'}>
-                          {announcement.type}
-                        </Badge>
-                        <Badge variant="outline">
-                          {announcement.priority}
-                        </Badge>
+            {announcements.map((announcement) => {
+              const isActiveEmergency =
+                (announcement.priority === "urgent" || announcement.type === "emergency") &&
+                String(announcement.status || "active").toLowerCase().trim() === "active"
+
+              return (
+                <Card key={announcement.id} className={isActiveEmergency ? "border-red-300 bg-red-50/50" : ""}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          {isActiveEmergency && <AlertTriangle className="h-5 w-5 text-red-600" />}
+                          <CardTitle>{announcement.title}</CardTitle>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant={announcement.type === "emergency" ? "destructive" : "secondary"}>
+                            {announcement.type}
+                          </Badge>
+                          <Badge variant="outline">{announcement.priority}</Badge>
+                          {String(announcement.status || "").toLowerCase().trim() === "resolved" && (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                              Resolved
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4 whitespace-pre-wrap">{announcement.content}</p>
-                  
-                  {announcement.imageUrl && typeof announcement.imageUrl === "string" && announcement.imageUrl.startsWith("data:image") ? (
-                    <img 
-                      src={announcement.imageUrl} 
-                      alt={announcement.title}
-                      className="w-full h-64 object-cover rounded-lg mb-4"
-                    />
-                  )}
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4 whitespace-pre-wrap">{announcement.content}</p>
 
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>By {announcement.author}</span>
-                    <span>•</span>
-                    <span>{new Date(announcement.created_at).toLocaleDateString()}</span>
-                  </div>
+                    {isRenderableAnnouncementImage(announcement.imageUrl) ? (
+                      <img
+                        src={announcement.imageUrl}
+                        alt={announcement.title}
+                        className="w-full h-64 object-cover rounded-lg mb-4"
+                      />
+                    ) : null}
 
-                  <div className="flex items-center gap-4 mt-4 pt-4 border-t">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleLike(announcement.id)}
-                      className={likedAnnouncements.has(announcement.id) ? 'text-blue-600' : ''}
-                    >
-                      <ThumbsUp className={`h-4 w-4 mr-2 ${likedAnnouncements.has(announcement.id) ? 'fill-current' : ''}`} />
-                      {announcement.likes || 0} Likes
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>By {announcement.author}</span>
+                      <span>•</span>
+                      <span>{new Date(announcement.created_at).toLocaleDateString()}</span>
+                    </div>
+
+                    <div className="flex items-center gap-4 mt-4 pt-4 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleLike(announcement.id)}
+                        className={likedAnnouncements.has(announcement.id) ? "text-blue-600" : ""}
+                      >
+                        <ThumbsUp className={`h-4 w-4 mr-2 ${likedAnnouncements.has(announcement.id) ? "fill-current" : ""}`} />
+                        {announcement.likes || 0} Likes
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
       </main>

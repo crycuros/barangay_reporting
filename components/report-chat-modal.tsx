@@ -10,6 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Send, Loader2, MapPin, User, Phone, Calendar } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface Message {
   id: string
@@ -48,10 +58,13 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   const [sending, setSending] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [currentStatus, setCurrentStatus] = useState(report.status)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const isEmergencyReport = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(report.type)
+  const isFinalStatus = currentStatus === "closed"
 
   // Fetch messages
   const fetchMessages = async () => {
@@ -101,7 +114,18 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   // Update status
   const updateStatus = async (newStatus: string) => {
     if (newStatus === currentStatus) return
+    if (isFinalStatus) return
 
+    if (newStatus === "resolved" || newStatus === "closed") {
+      setPendingStatus(newStatus)
+      setConfirmOpen(true)
+      return
+    }
+
+    await executeStatusUpdate(newStatus)
+  }
+
+  const executeStatusUpdate = async (newStatus: string) => {
     setUpdatingStatus(true)
     try {
       const res = await fetch(`/api/reports/${report.id}`, {
@@ -121,6 +145,10 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
       setUpdatingStatus(false)
     }
   }
+
+  useEffect(() => {
+    setCurrentStatus(report.status)
+  }, [report.id, report.status])
 
   // Start polling when modal opens
   useEffect(() => {
@@ -170,10 +198,9 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             <span>{report.title}</span>
             <Badge variant={
-              currentStatus === 'resolved' && isEmergencyReport ? 'destructive' :
-              currentStatus === 'resolved' ? 'secondary' :
+              currentStatus === 'resolved' || currentStatus === 'closed' ? 'secondary' :
               currentStatus === 'in-progress' ? 'default' :
-              currentStatus === 'pending' ? 'destructive' : 'outline'
+              currentStatus === 'pending' ? (isEmergencyReport ? 'destructive' : 'outline') : 'outline'
             }>
               {currentStatus}
             </Badge>
@@ -218,7 +245,7 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
         {(currentUserRole === "admin" || currentUserRole === "official") && (
           <div className="flex items-center gap-2 px-1">
             <span className="text-sm font-medium">Change Status:</span>
-            <Select value={currentStatus} onValueChange={updateStatus} disabled={updatingStatus}>
+            <Select value={currentStatus} onValueChange={updateStatus} disabled={updatingStatus || isFinalStatus}>
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -230,6 +257,11 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
               </SelectContent>
             </Select>
             {updatingStatus && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isFinalStatus && (
+              <span className="text-xs text-muted-foreground">
+                Locked after {currentStatus}
+              </span>
+            )}
           </div>
         )}
 
@@ -294,6 +326,32 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
           </Button>
         </div>
       </DialogContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Confirm mark as {pendingStatus}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will lock the report status and prevent further status changes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!pendingStatus) return
+                const target = pendingStatus
+                setPendingStatus(null)
+                await executeStatusUpdate(target)
+              }}
+            >
+              Yes, confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

@@ -144,7 +144,7 @@ export default function ResidentPage() {
             </Card>
           </div>
 
-          <div onClick={() => router.push('/profile')} className="cursor-pointer">
+          <div onClick={() => router.push('/resident/profile')} className="cursor-pointer">
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-center justify-between">

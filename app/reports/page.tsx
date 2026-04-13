@@ -25,6 +25,8 @@ import { useAuth } from "@/lib/auth/context"
 import { cn } from "@/lib/utils"
 import { ReportChatModal } from "@/components/report-chat-modal"
 
+const EMERGENCY_REPORT_TYPES = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"]
+
 export default function ReportsPage() {
   const router = useRouter()
   const [reports, setReports] = useState<Report[]>([])
@@ -42,6 +44,40 @@ export default function ReportsPage() {
     setIsOfficial(role === "official" || role === "admin")
     fetchReports()
   }, [role])
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      fetchReports()
+    }, 4000)
+
+    const onFocus = () => {
+      fetchReports()
+    }
+
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onFocus)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onFocus)
+    }
+  }, [])
+
+  useEffect(() => {
+    const es = new EventSource("/api/events")
+    es.addEventListener("update", (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent).data)
+        if (parsed?.type === "reports.updated") {
+          fetchReports()
+        }
+      } catch {
+        // noop
+      }
+    })
+    return () => es.close()
+  }, [])
 
   const parseJsonSafe = async (res: Response) => {
     const ct = res.headers.get("content-type") || ""
@@ -95,6 +131,14 @@ export default function ReportsPage() {
   }
 
   const openReportDialog = (report: Report) => {
+    if (report.unreadByAdmin) {
+      fetch(`/api/reports/${report.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAsReadByAdmin: true }),
+        credentials: "same-origin",
+      }).then(() => fetchReports()).catch(() => {})
+    }
     // Open chat modal for everyone (residents and admins)
     setChatReport(report)
     setChatModalOpen(true)
@@ -110,20 +154,20 @@ export default function ReportsPage() {
     reader.readAsDataURL(file)
   }
 
-  const getStatusColor = (status: string, type?: string) => {
-    const isEmergency = type === "crime" || type === "missing-person"
-    switch (status) {
-      case "pending":
-        return "destructive"
-      case "in-progress":
-        return "default"
-      case "resolved":
-        return isEmergency ? "destructive" : "secondary"
-      case "closed":
-        return "outline"
-      default:
-        return "outline"
-    }
+  const isEmergencyReport = (type?: string) => EMERGENCY_REPORT_TYPES.includes((type || "").toLowerCase())
+
+  const isResolvedStatus = (status: string) => status === "resolved" || status === "closed"
+
+  const getStatusLabel = (status: string, type?: string) => {
+    if (isEmergencyReport(type) && isResolvedStatus(status)) return "resolved"
+    return status
+  }
+
+  const getStatusBadgeClass = (status: string, type?: string) => {
+    if (isResolvedStatus(status)) return "bg-green-50 text-green-700 border-green-200"
+    if (isEmergencyReport(type) && status === "pending") return "bg-red-50 text-red-700 border-red-200"
+    if (status === "in-progress") return "bg-amber-50 text-amber-700 border-amber-200"
+    return ""
   }
 
   const getTypeColor = (type: string) => {
@@ -191,7 +235,7 @@ export default function ReportsPage() {
 
           <TabsContent value="all" className="space-y-4">
             {filterReports("all").map((report) => {
-              const isEmergency = report.type === "crime" || report.type === "missing-person" || report.status === "pending"
+              const isEmergency = isEmergencyReport(report.type) && !isResolvedStatus(report.status)
               return (
               <Card
                 key={report.id}
@@ -210,7 +254,8 @@ export default function ReportsPage() {
                           <Badge variant="destructive">Emergency</Badge>
                         )}
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
-                        <Badge variant={getStatusColor(report.status, report.type)}>{report.status}</Badge>
+                        <Badge variant="outline" className={getStatusBadgeClass(report.status, report.type)}>{getStatusLabel(report.status, report.type)}</Badge>
+                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>
@@ -246,7 +291,7 @@ export default function ReportsPage() {
 
           <TabsContent value="pending" className="space-y-4">
             {filterReports("pending").map((report) => {
-              const isEmergency = report.type === "crime" || report.type === "missing-person"
+              const isEmergency = isEmergencyReport(report.type) && !isResolvedStatus(report.status)
               return (
               <Card
                 key={report.id}
@@ -265,6 +310,7 @@ export default function ReportsPage() {
                           <Badge variant="destructive">Emergency</Badge>
                         )}
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
+                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>
@@ -305,6 +351,8 @@ export default function ReportsPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <CardTitle className="text-lg">{report.title}</CardTitle>
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
+                        <Badge variant="outline" className={getStatusBadgeClass(report.status, report.type)}>{getStatusLabel(report.status, report.type)}</Badge>
+                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>
@@ -350,6 +398,8 @@ export default function ReportsPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <CardTitle className="text-lg">{report.title}</CardTitle>
                         <Badge variant={getTypeColor(report.type)}>{report.type}</Badge>
+                        <Badge variant="outline" className={getStatusBadgeClass(report.status, report.type)}>{getStatusLabel(report.status, report.type)}</Badge>
+                        {report.unreadByAdmin && <Badge variant="destructive">New</Badge>}
                       </div>
                       <CardDescription>{new Date(report.createdAt).toLocaleString()}</CardDescription>
                     </div>

@@ -9,6 +9,25 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CheckCircle2, XCircle, Clock, FileCheck, Scroll } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 type CertRequest = {
   id: string
@@ -42,6 +61,7 @@ function statusBadge(status: string) {
     case "pending": return <Badge variant="destructive">Pending</Badge>
     case "approved": return <Badge variant="default">Approved</Badge>
     case "ready": return <Badge variant="secondary">Ready for Pickup</Badge>
+    case "picked_up": return <Badge variant="secondary">Picked Up</Badge>
     case "rejected": return <Badge variant="outline">Rejected</Badge>
     default: return <Badge variant="outline">{status}</Badge>
   }
@@ -51,8 +71,26 @@ export function AdminCertificatesClient() {
   const [requests, setRequests] = useState<CertRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [actioning, setActioning] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ id: string; action: "approve" | "ready" | "picked_up" } | null>(null)
+  const [rejectDialog, setRejectDialog] = useState<{ id: string } | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
 
   useEffect(() => { fetchRequests() }, [])
+
+  useEffect(() => {
+    const es = new EventSource("/api/events")
+    es.addEventListener("update", (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent).data)
+        if (parsed?.type === "certificates.updated") {
+          fetchRequests()
+        }
+      } catch {
+        // noop
+      }
+    })
+    return () => es.close()
+  }, [])
 
   const fetchRequests = async () => {
     try {
@@ -63,16 +101,31 @@ export function AdminCertificatesClient() {
     setLoading(false)
   }
 
-  const handleAction = async (id: string, action: "approve" | "reject" | "ready") => {
+  const handleAction = async (id: string, action: "approve" | "reject" | "ready" | "picked_up") => {
+    if (action === "approve" || action === "ready" || action === "picked_up") {
+      setConfirmAction({ id, action })
+      return
+    }
+
+    if (action === "reject") {
+      setRejectReason("")
+      setRejectDialog({ id })
+      return
+    }
+  }
+
+  const runAction = async (id: string, action: "approve" | "reject" | "ready" | "picked_up", notes?: string) => {
     setActioning(id)
     try {
       const res = await fetch(`/api/certificates/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, notes: notes?.trim() ? notes.trim() : undefined }),
       })
-      if (res.ok) fetchRequests()
+      const data = await res.json()
+      if (res.ok && data?.success) fetchRequests()
+      else alert(data?.error || "Failed to update request")
     } catch {}
     setActioning(null)
   }
@@ -94,10 +147,11 @@ export function AdminCertificatesClient() {
             <TabsTrigger value="pending">Pending ({filter("pending").length})</TabsTrigger>
             <TabsTrigger value="approved">Approved ({filter("approved").length})</TabsTrigger>
             <TabsTrigger value="ready">Ready ({filter("ready").length})</TabsTrigger>
+            <TabsTrigger value="picked_up">Picked Up ({filter("picked_up").length})</TabsTrigger>
             <TabsTrigger value="all">All ({requests.length})</TabsTrigger>
           </TabsList>
 
-          {["pending", "approved", "ready", "all"].map(tab => (
+          {["pending", "approved", "ready", "picked_up", "all"].map(tab => (
             <TabsContent key={tab} value={tab} className="space-y-4">
               {loading ? (
                 <p className="text-center text-muted-foreground py-8">Loading...</p>
@@ -154,6 +208,11 @@ export function AdminCertificatesClient() {
                             <FileCheck className="h-4 w-4 mr-1" /> Mark Ready
                           </Button>
                         )}
+                        {req.status === "ready" && (
+                          <Button size="sm" variant="default" onClick={() => handleAction(req.id, "picked_up")} disabled={actioning === req.id}>
+                            <CheckCircle2 className="h-4 w-4 mr-1" /> Mark Picked Up
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -163,6 +222,75 @@ export function AdminCertificatesClient() {
           ))}
         </Tabs>
       </main>
+
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => { if (!open) setConfirmAction(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.action === "approve"
+                ? "Approve certificate request?"
+                : confirmAction?.action === "ready"
+                ? "Mark request as ready?"
+                : "Mark request as picked up?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.action === "approve"
+                ? "This will move the request to approved status."
+                : confirmAction?.action === "ready"
+                ? "This will mark the request as ready for pickup."
+                : "This will finalize the request as picked up by the resident."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!confirmAction) return
+                const { id, action } = confirmAction
+                setConfirmAction(null)
+                await runAction(id, action)
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={!!rejectDialog} onOpenChange={(open) => { if (!open) setRejectDialog(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject certificate request</DialogTitle>
+            <DialogDescription>Provide a reason for rejection. This will be visible to the resident.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Enter rejection reason..."
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialog(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!rejectDialog) return
+                if (!rejectReason.trim()) {
+                  alert("Rejection reason is required.")
+                  return
+                }
+                const id = rejectDialog.id
+                setRejectDialog(null)
+                await runAction(id, "reject", rejectReason)
+              }}
+            >
+              Reject Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -31,6 +31,8 @@ export interface Report {
   updatedAt: string
   response?: string
   images?: string[]
+  unreadByAdmin?: boolean
+  unreadByResident?: boolean
 }
 
 export interface Official {
@@ -42,4 +44,7 @@ export interface Official {
   photo?: string
   department: string
   isActive: boolean
+  isVerified?: boolean
+  approvalStatus?: string
+  kycStatus?: string
 }

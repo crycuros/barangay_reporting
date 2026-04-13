@@ -81,6 +81,8 @@ export default function RegisterPage() {
   const [passwordFocus, setPasswordFocus] = useState(false)
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null)
   const [selectedRole, setSelectedRole] = useState<"resident" | "official">("resident")
+  const [officialDepartment, setOfficialDepartment] = useState("")
+  const [officialProfilePicture, setOfficialProfilePicture] = useState<string>("")
   const [registrationSuccess, setRegistrationSuccess] = useState(false)
 
   useEffect(() => {
@@ -144,6 +146,8 @@ export default function RegisterPage() {
       if (!address.trim()) throw new Error("Address is required")
       if (!zone.trim()) throw new Error("Zone/Purok is required")
       if (!selectedDate) throw new Error("Date of birth is required")
+      if (selectedRole === "official" && !officialDepartment) throw new Error("Department is required for official registration")
+      if (selectedRole === "official" && !officialProfilePicture) throw new Error("Profile picture is required for official registration")
       if (!acceptTerms) throw new Error("You must accept the Terms and Privacy Policy")
 
       const fullPhone = phone.trim()
@@ -159,7 +163,9 @@ export default function RegisterPage() {
           phone: fullPhone,
           address,
           zone,
-          date_of_birth: selectedDate ? selectedDate.toISOString().split('T')[0] : ""
+          date_of_birth: selectedDate ? selectedDate.toISOString().split('T')[0] : "",
+          department: selectedRole === "official" ? officialDepartment : "",
+          profile_picture_base64: selectedRole === "official" ? officialProfilePicture : ""
         }),
         credentials: "same-origin",
       })
@@ -196,7 +202,7 @@ export default function RegisterPage() {
             <form onSubmit={handleRegister}>
               <div className="flex flex-col gap-4">
                 <div className="grid gap-2">
-                  <Label>Register as</Label>
+                  <Label>Register as *</Label>
                   <Select value={selectedRole} onValueChange={(v: "resident" | "official") => setSelectedRole(v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select account type" />
@@ -211,11 +217,11 @@ export default function RegisterPage() {
                   )}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="fullName">Full name</Label>
+                  <Label htmlFor="fullName">Full name *</Label>
                   <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
                 </div>
                 <div className="grid gap-2">
-                  <Label>Contact number</Label>
+                  <Label>Contact number *</Label>
                   <PhoneInput
                     defaultCountry="ph"
                     value={phone}
@@ -234,15 +240,15 @@ export default function RegisterPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="address">Address</Label>
+                  <Label htmlFor="address">Address *</Label>
                   <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="House No., Street, Zone/Purok" />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="zone">Zone/Purok</Label>
+                  <Label htmlFor="zone">Zone/Purok *</Label>
                   <Input id="zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="e.g., Zone 95" />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="dob">Date of Birth</Label>
+                  <Label htmlFor="dob">Date of Birth *</Label>
                   <div className="relative">
                     <Input
                       id="dob"
@@ -273,11 +279,11 @@ export default function RegisterPage() {
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Email *</Label>
                   <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Password *</Label>
                   <Input 
                     id="password" 
                     type="password" 
@@ -317,7 +323,7 @@ export default function RegisterPage() {
                   )}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="confirmPassword">Confirm password</Label>
+                  <Label htmlFor="confirmPassword">Confirm password *</Label>
                   <Input 
                     id="confirmPassword" 
                     type="password" 
@@ -331,6 +337,44 @@ export default function RegisterPage() {
                     <p className="text-xs text-red-500">{confirmPasswordError}</p>
                   )}
                 </div>
+                {selectedRole === "official" && (
+                  <>
+                    <div className="grid gap-2">
+                      <Label>Department *</Label>
+                      <Select value={officialDepartment} onValueChange={setOfficialDepartment}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Administration">Administration</SelectItem>
+                          <SelectItem value="Public Safety">Public Safety</SelectItem>
+                          <SelectItem value="Health Services">Health Services</SelectItem>
+                          <SelectItem value="Social Services">Social Services</SelectItem>
+                          <SelectItem value="Public Works">Public Works</SelectItem>
+                          <SelectItem value="Disaster Response">Disaster Response</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="officialProfile">Profile picture *</Label>
+                      <Input
+                        id="officialProfile"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) {
+                            setOfficialProfilePicture("")
+                            return
+                          }
+                          const reader = new FileReader()
+                          reader.onload = () => setOfficialProfilePicture(String(reader.result || ""))
+                          reader.readAsDataURL(file)
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="flex items-start gap-2">
                   <input
                     id="acceptTerms"

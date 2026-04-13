@@ -47,7 +47,13 @@ export function DashboardContent() {
       const data = await res.json()
       if (data?.data) {
         setRecentAnnouncements(data.data.slice(0, 5))
-        setEmergencyAnnouncements(data.data.filter((a: Announcement) => a.priority === "urgent" || a.type === "emergency"))
+        setEmergencyAnnouncements(
+          data.data.filter((a: Announcement) => {
+            const isEmergency = a.priority === "urgent" || a.type === "emergency"
+            const isActive = String((a as any).status || "active").toLowerCase().trim() === "active"
+            return isEmergency && isActive
+          })
+        )
       }
     } catch {}
   }

@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
       full_name: string | null
       role: string
       approval_status: string
+      is_verified: number
       phone: string | null
       address: string | null
       zone: string | null
@@ -38,12 +39,16 @@ export async function GET(request: NextRequest) {
         u.full_name, 
         u.role, 
         COALESCE(u.approval_status, 'approved') as approval_status,
+        COALESCE(u.is_verified, 0) as is_verified,
         rp.phone, 
         rp.address, 
         rp.zone, 
         u.created_at 
       FROM users u
       LEFT JOIN resident_profiles rp ON u.id = rp.user_id
+      ${session.role === "admin"
+        ? "WHERE u.role = 'official' AND (COALESCE(u.approval_status, 'approved') = 'pending' OR COALESCE(u.is_verified, 0) = 0)"
+        : ""}
       ORDER BY u.created_at DESC`)
 
     return NextResponse.json({
@@ -54,6 +59,7 @@ export async function GET(request: NextRequest) {
         full_name: u.full_name,
         role: u.role,
         approval_status: u.approval_status,
+        is_verified: Boolean(u.is_verified),
         phone: u.phone,
         address: u.address,
         zone: u.zone,
@@ -71,7 +77,7 @@ export async function POST(request: NextRequest) {
   try {
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
-    if (!session || !canManageUsers(session.role)) {
+    if (!session || !isSuperAdmin(session.role)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
@@ -102,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     const password_hash = await bcrypt.hash(password, 10)
-    const approvalStatus = role === "admin" ? "approved" : "approved"
+    const approvalStatus = role === "admin" ? "approved" : "pending"
     await execute("INSERT INTO users (email, password_hash, full_name, role, approval_status) VALUES (?, ?, ?, ?, ?)", [
       email,
       password_hash,

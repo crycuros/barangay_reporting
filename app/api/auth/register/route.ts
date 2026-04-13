@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
     const address = typeof body.address === "string" ? body.address.trim() : ""
     const zone = typeof body.zone === "string" ? body.zone.trim() : ""
     const dateOfBirth = typeof body.date_of_birth === "string" ? body.date_of_birth : ""
+    const department = typeof body.department === "string" ? body.department.trim() : ""
+    const profilePictureBase64 = typeof body.profile_picture_base64 === "string" ? body.profile_picture_base64 : ""
 
     if (!email || !password) {
       return NextResponse.json(
@@ -42,6 +44,21 @@ export async function POST(request: NextRequest) {
     const role = roleInput === "official" ? "official" : "resident"
     const approvalStatus = role === "official" ? "pending" : "approved"
 
+    if (role === "official") {
+      if (!department) {
+        return NextResponse.json(
+          { success: false, error: "Department is required for official registration" },
+          { status: 400, headers: corsHeaders }
+        )
+      }
+      if (!profilePictureBase64 || !profilePictureBase64.startsWith("data:image/")) {
+        return NextResponse.json(
+          { success: false, error: "Profile picture is required for official registration" },
+          { status: 400, headers: corsHeaders }
+        )
+      }
+    }
+
     const existing = await queryOne<{ id: number }>("SELECT id FROM users WHERE email = ?", [email])
     if (existing) {
       return NextResponse.json(
@@ -54,8 +71,8 @@ export async function POST(request: NextRequest) {
 
     console.log("Creating user account with:", { email, fullName, role, approvalStatus })
     await execute(
-      "INSERT INTO users (email, password_hash, full_name, role, approval_status) VALUES (?, ?, ?, ?, ?)",
-      [email, password_hash, fullName || null, role, approvalStatus]
+      "INSERT INTO users (email, password_hash, full_name, role, approval_status, avatar_url) VALUES (?, ?, ?, ?, ?, ?)",
+      [email, password_hash, fullName || null, role, approvalStatus, profilePictureBase64 || null]
     )
 
     const userResult = await queryOne<{ id: number }>("SELECT id FROM users WHERE email = ?", [email])
@@ -73,6 +90,13 @@ export async function POST(request: NextRequest) {
       [userResult.id, phone, address || null, zone || null, dateOfBirth || null]
     )
     console.log("Resident profile created successfully")
+
+    if (role === "official") {
+      await execute(
+        "INSERT INTO officials (name, position, department, contact, email, is_active) VALUES (?, ?, ?, ?, ?, ?)",
+        [fullName || email, "Barangay Official", department, phone || "", email, 0]
+      ).catch(() => {})
+    }
 
     const res = NextResponse.json({
       success: true,

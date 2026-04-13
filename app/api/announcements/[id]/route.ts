@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { execute, queryOne, queryAll } from "@/lib/db"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
+import { normalizeAnnouncementImage } from "@/lib/server/image-url"
+import { publishEvent } from "@/lib/server/realtime"
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -71,7 +73,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           createdAt: updated.created_at,
           created_at: updated.created_at,
           updatedAt: updated.updated_at,
-          imageUrl: updated.image_url || null,
+          imageUrl: normalizeAnnouncementImage(updated.image_url),
           likes: typeof updated.likes === "number" ? updated.likes : Number(updated.likes) || 0,
           location: updated.location || null,
         },
@@ -95,6 +97,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
+    const currentAnnouncement = await queryOne<{ status: string }>("SELECT status FROM announcements WHERE id = ?", [id])
+    const currentStatus = String(currentAnnouncement?.status || "").toLowerCase().trim()
+    if (currentStatus === "resolved") {
+      return NextResponse.json(
+        { success: false, error: "Announcement is already resolved and cannot be modified" },
+        { status: 409 }
+      )
+    }
+
     console.log("PATCH announcement:", id, "fields:", fields, "session:", session?.role)
 
     if (fields.length === 0) {
@@ -103,6 +114,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     values.push(id)
     await execute(`UPDATE announcements SET ${fields.join(", ")} WHERE id = ?`, values)
+    publishEvent("announcements.updated", { action: "updated", id: String(id) })
 
     const updated = await queryOne("SELECT * FROM announcements WHERE id = ?", [id])
     return NextResponse.json({
@@ -119,7 +131,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         createdAt: updated.created_at,
         created_at: updated.created_at,
         updatedAt: updated.updated_at,
-        imageUrl: updated.image_url || null,
+        imageUrl: normalizeAnnouncementImage(updated.image_url),
         likes: typeof updated.likes === "number" ? updated.likes : Number(updated.likes) || 0,
         location: updated.location || null,
       },
@@ -140,6 +152,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const { id } = await params
     await execute("DELETE FROM announcements WHERE id = ?", [id])
+    publishEvent("announcements.updated", { action: "deleted", id: String(id) })
     return NextResponse.json({ success: true, message: "Deleted" })
   } catch (e) {
     console.error("Announcements DELETE error:", e)

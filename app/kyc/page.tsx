@@ -124,6 +124,26 @@ export default function KYCPage() {
   const handleNext = async () => {
     setError(null)
     try {
+      if (currentStep === 0) {
+        if (!formData.full_name?.trim()) throw new Error("Full Name is required")
+        if (!formData.phone?.trim()) throw new Error("Phone Number is required")
+        if (!formData.date_of_birth?.trim()) throw new Error("Date of Birth is required")
+      }
+      if (currentStep === 1) {
+        if (!formData.address_line1?.trim()) throw new Error("Address Line 1 is required")
+        if (!formData.barangay?.trim()) throw new Error("Barangay is required")
+        if (!formData.zone?.trim()) throw new Error("Zone/Purok is required")
+      }
+      if (currentStep === 2) {
+        if (!formData.id_type?.trim()) throw new Error("ID Type is required")
+        if (!formData.id_number?.trim()) throw new Error("ID Number is required")
+        if (!formData.id_front_url?.trim()) throw new Error("ID Front Photo is required")
+        if (!formData.id_back_url?.trim()) throw new Error("ID Back Photo is required")
+      }
+      if (currentStep === 3) {
+        if (!formData.selfie_url?.trim()) throw new Error("Selfie Photo is required")
+      }
+
       await saveStepData()
       
       if (currentStep < 3) {
@@ -375,22 +395,24 @@ function AddressStep({ formData, setFormData }: any) {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Barangay</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Barangay *</label>
           <input
             type="text"
             value={formData.barangay || ''}
             onChange={(e) => setFormData({ ...formData, barangay: e.target.value })}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            required
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Zone/Purok</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Zone/Purok *</label>
           <input
             type="text"
             value={formData.zone || ''}
             onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            required
           />
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
+import { canManageUsers } from "@/lib/auth/roles"
 import { AdminSidebar } from "@/components/admin-sidebar"
 import { AdminHeader } from "@/components/admin-header"
 import { AdminCreateUser } from "@/components/admin-create-user"
@@ -14,7 +15,7 @@ export default async function AdminUsersPage() {
   if (!session) {
     redirect("/admin-login")
   }
-  if (session.role !== "admin") {
+  if (!canManageUsers(session.role)) {
     redirect("/dashboard")
   }
 
@@ -24,9 +25,11 @@ export default async function AdminUsersPage() {
       <AdminHeader />
       <main className="ml-64 p-6 space-y-6">
         <AdminUserApprovals />
-        <div className="max-w-xl">
-          <AdminCreateUser />
-        </div>
+        {session.role === "super_admin" ? (
+          <div className="max-w-xl">
+            <AdminCreateUser />
+          </div>
+        ) : null}
       </main>
     </div>
   )

@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils"
 import { DashboardSkeleton, HeaderSkeleton } from "@/components/skeleton-loader"
 import { ReportChatModal } from "@/components/report-chat-modal"
 
+const EMERGENCY_REPORT_TYPES = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"]
+
 type Announcement = {
   id: string
   title: string
@@ -334,12 +336,14 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
   }
 
   const getStatusColor = (status: string, type?: string) => {
-    const isEmergency = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(type)
+    const normalizedStatus = (status || "").toLowerCase().trim()
+    const isEmergency = EMERGENCY_REPORT_TYPES.includes((type || "").toLowerCase())
+    const isResolved = normalizedStatus === "resolved" || normalizedStatus === "closed"
     switch (status) {
-      case "pending": return "destructive"
+      case "pending": return isEmergency ? "destructive" : "outline"
       case "in-progress": return "default"
-      case "resolved": return isEmergency ? "destructive" : "secondary"
-      case "closed": return "outline"
+      case "resolved": return "secondary"
+      case "closed": return "secondary"
       default: return "outline"
     }
   }
@@ -354,7 +358,11 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
     }
   }
 
-  const emergencies = announcements.filter(a => (a.priority === "urgent" || a.type === "emergency") && ((a as any).status === "active" || !(a as any).status))
+  const emergencies = announcements.filter(a => {
+    const status = String((a as any).status || "active").toLowerCase().trim()
+    const isActive = status === "active"
+    return (a.priority === "urgent" || a.type === "emergency") && isActive
+  })
   const pendingReports = reports.filter(r => r.status === "pending").length
   const resolvedReports = reports.filter(r => r.status === "resolved" || r.status === "closed").length
   const displayName = profile.full_name || user.email
@@ -504,7 +512,8 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                       key={`ann-${item.id}`}
                       className={cn(
                         "rounded-xl border bg-card p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md",
-                        (item.data as Announcement).priority === "urgent" || (item.data as Announcement).type === "emergency"
+                        (((item.data as Announcement).priority === "urgent" || (item.data as Announcement).type === "emergency") &&
+                          String((item.data as any).status || "active").toLowerCase().trim() === "active")
                           ? "border-destructive/30 bg-destructive/5"
                           : ""
                       )}
@@ -560,7 +569,8 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                       key={`rep-${item.id}`}
                       className={cn(
                         "rounded-xl border bg-card p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md",
-                        ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes((item.data as Report).type)
+                        (EMERGENCY_REPORT_TYPES.includes(((item.data as Report).type || "").toLowerCase()) &&
+                          !["resolved", "closed"].includes(String((item.data as Report).status || "").toLowerCase().trim()))
                           ? "border-destructive/20 bg-destructive/5"
                           : ""
                       )}
@@ -623,7 +633,9 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                 {reports.length > 0 ? (
                   <div className="space-y-3">
                     {reports.map((report) => {
-                      const isEmerg = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(report.type) || report.status === "pending"
+                      const isEmerg =
+                        EMERGENCY_REPORT_TYPES.includes((report.type || "").toLowerCase()) &&
+                        !["resolved", "closed"].includes(String(report.status || "").toLowerCase().trim())
                       return (
                         <Card
                           key={report.id}
@@ -702,7 +714,9 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                     key={a.id}
                     className={cn(
                       "overflow-hidden transition-shadow hover:shadow-md",
-                      (a.priority === "urgent" || a.type === "emergency") && "border-destructive/30 bg-destructive/5"
+                      ((a.priority === "urgent" || a.type === "emergency") &&
+                        String((a as any).status || "active").toLowerCase().trim() === "active") &&
+                        "border-destructive/30 bg-destructive/5"
                     )}
                   >
                   <CardContent className="p-4 sm:p-5">
@@ -777,9 +791,9 @@ export function ResidentDashboard({ user, profile, residentProfile }: ResidentDa
                             <Badge variant={
                               cert.status === "pending" ? "destructive" :
                               cert.status === "approved" ? "default" :
-                              cert.status === "ready" ? "secondary" : "outline"
+                              cert.status === "ready" || cert.status === "picked_up" ? "secondary" : "outline"
                             }>
-                              {cert.status === "ready" ? "Ready for Pickup" : cert.status}
+                              {cert.status === "ready" ? "Ready for Pickup" : cert.status === "picked_up" ? "Picked Up" : cert.status}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">{cert.purpose}</p>

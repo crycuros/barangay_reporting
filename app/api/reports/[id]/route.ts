@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { execute, queryOne } from "@/lib/db"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { getCorsHeaders, handleOptions } from "@/lib/cors"
+import { publishEvent } from "@/lib/server/realtime"
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
@@ -25,11 +26,50 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const body = await request.json()
     console.log("Report PATCH - updating report:", id, "status:", body.status)
 
-    // Get current report status for comparison
+    if (body.markAsReadByAdmin === true) {
+      await execute("UPDATE reports SET unread_by_admin = FALSE WHERE id = ?", [id])
+      const updatedRead = await queryOne<any>("SELECT * FROM reports WHERE id = ?", [id])
+      if (!updatedRead) return NextResponse.json({ success: false, error: "Not found" }, { status: 404, headers })
+      publishEvent("reports.updated", { action: "read", id: String(id) })
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: String(updatedRead.id),
+          type: updatedRead.type,
+          title: updatedRead.title,
+          description: updatedRead.description,
+          location: updatedRead.location,
+          reporterName: updatedRead.reporter_name,
+          reporterContact: updatedRead.reporter_contact,
+          status: updatedRead.status,
+          response: updatedRead.response,
+          images: updatedRead.image_url ? [updatedRead.image_url] : [],
+          unreadByAdmin: Boolean(updatedRead.unread_by_admin),
+          unreadByResident: Boolean(updatedRead.unread_by_resident),
+          createdAt: updatedRead.created_at,
+          updatedAt: updatedRead.updated_at,
+        },
+      }, { headers })
+    }
+
+    // Get current report status for comparison and lock enforcement
     const currentReport = await queryOne<{ status: string }>(
       "SELECT status FROM reports WHERE id = ?",
       [id]
     )
+    const currentStatus = String(currentReport?.status || "").toLowerCase().trim()
+    const isFinalStatus = currentStatus === "closed"
+
+    // Once report is final, prevent further modifications.
+    if (
+      isFinalStatus &&
+      (body.status !== undefined || body.response !== undefined || body.imageBase64 !== undefined)
+    ) {
+      return NextResponse.json(
+        { success: false, error: `Report is already ${currentStatus} and cannot be modified` },
+        { status: 409, headers }
+      )
+    }
 
     const fields: string[] = []
     const values: any[] = []
@@ -69,6 +109,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     values.push(id)
     await execute(`UPDATE reports SET ${fields.join(", ")}, updated_at = NOW() WHERE id = ?`, values)
+    publishEvent("reports.updated", { action: "updated", id: String(id) })
 
     // Create system message for status change
     if (statusChanged) {
@@ -124,6 +165,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         status: updated.status,
         response: updated.response,
         images: updated.image_url ? [updated.image_url] : [],
+        unreadByAdmin: Boolean(updated.unread_by_admin),
+        unreadByResident: Boolean(updated.unread_by_resident),
         createdAt: updated.created_at,
         updatedAt: updated.updated_at,
       },
@@ -147,6 +190,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const { id } = await params
     await execute("DELETE FROM reports WHERE id = ?", [id])
+    publishEvent("reports.updated", { action: "deleted", id: String(id) })
     return NextResponse.json({ success: true, message: "Deleted" }, { headers })
   } catch (e) {
     console.error("Reports DELETE error:", e)

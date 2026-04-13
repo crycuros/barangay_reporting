@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { queryAll, execute } from "@/lib/db"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
+import { normalizeAnnouncementImage } from "@/lib/server/image-url"
+import { publishEvent } from "@/lib/server/realtime"
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
           createdAt: r.created_at,
           created_at: r.created_at,
           updatedAt: r.updated_at,
-          imageUrl: r.image_url || null,
+          imageUrl: normalizeAnnouncementImage(r.image_url),
           likes: typeof r.likes === "number" ? r.likes : Number(r.likes) || 0,
           location: r.location || null,
           userHasLiked: isLiked,
@@ -73,10 +75,11 @@ export async function POST(request: NextRequest) {
       [body.title, body.content, body.type || "general", body.priority || "normal", body.author || "Official", body.image_url || null, body.likes || 0, body.location || null, body.status || "active"]
     )
     console.log("Insert result:", result)
+    publishEvent("announcements.updated", { action: "created", id: String(result.insertId) })
 
     return NextResponse.json({
       success: true,
-      data: { id: String(result.insertId), title: body.title, content: body.content, type: body.type, priority: body.priority, author: body.author || "Official", imageUrl: body.image_url || null, likes: body.likes || 0, location: body.location || null, status: body.status || "active", created_at: new Date().toISOString() },
+      data: { id: String(result.insertId), title: body.title, content: body.content, type: body.type, priority: body.priority, author: body.author || "Official", imageUrl: normalizeAnnouncementImage(body.image_url), likes: body.likes || 0, location: body.location || null, status: body.status || "active", created_at: new Date().toISOString() },
     })
   } catch (e) {
     console.error("Announcements POST error:", e)

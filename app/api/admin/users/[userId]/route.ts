@@ -18,7 +18,7 @@ export async function PATCH(
   try {
     const token = getSessionFromRequest(request.cookies, request.headers)
     const session = token ? await verifySession(token) : null
-    if (!session || session.role !== "admin") {
+    if (!session || session.role !== "super_admin") {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
@@ -32,12 +32,12 @@ export async function PATCH(
 
     if (action === "approve") {
       await execute(
-        "UPDATE users SET approval_status = 'approved' WHERE id = ? AND role = 'official'",
+        "UPDATE users SET approval_status = 'approved', is_verified = 1 WHERE id = ? AND role = 'official'",
         [userId]
       )
     } else {
       await execute(
-        "UPDATE users SET approval_status = 'rejected' WHERE id = ? AND role = 'official'",
+        "UPDATE users SET approval_status = 'rejected', is_verified = 0 WHERE id = ? AND role = 'official'",
         [userId]
       )
     }

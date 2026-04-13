@@ -45,6 +45,40 @@ export default function ReportsPage() {
     loadData()
   }, [])
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      loadData()
+    }, 4000)
+
+    const onFocus = () => {
+      loadData()
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
+  }, [])
+
+  useEffect(() => {
+    const es = new EventSource("/api/events")
+    es.addEventListener("update", (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent).data)
+        if (parsed?.type === "reports.updated") {
+          loadData()
+        }
+      } catch {
+        // noop
+      }
+    })
+    return () => es.close()
+  }, [])
+
   const loadData = async () => {
     try {
       const [sessionRes, reportsRes] = await Promise.all([

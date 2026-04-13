@@ -18,6 +18,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
@@ -25,6 +35,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2, ThumbsUp, Image, Smile, MapPin } from "lucide-react"
 import type { Announcement, AnnouncementType } from "@/lib/types"
+
+const isRenderableAnnouncementImage = (value: unknown): value is string => {
+  if (typeof value !== "string") return false
+  const src = value.trim()
+  if (!src) return false
+  if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("/")) return true
+  if (!src.startsWith("data:image/")) return false
+  return /^data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/.test(src.replace(/\s+/g, ""))
+}
 
 export default function AnnouncementsPage() {
   const router = useRouter()
@@ -56,13 +75,19 @@ export default function AnnouncementsPage() {
   const emojiPanelRef = useRef<HTMLDivElement | null>(null)
   const [emojiSearch, setEmojiSearch] = useState("")
   const [showLocationInput, setShowLocationInput] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+  const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false)
+  const [announcementToResolve, setAnnouncementToResolve] = useState<string | null>(null)
 
   const readAndSetFile = (file: File) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      setFormData(prev => ({ ...prev, image_url: String(reader.result) }))
+    const previewUrl = URL.createObjectURL(file)
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl)
     }
-    reader.readAsDataURL(file)
+    setImageFile(file)
+    setImagePreviewUrl(previewUrl)
+    setFormData(prev => ({ ...prev, image_url: previewUrl }))
   }
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -206,6 +231,23 @@ export default function AnnouncementsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const es = new EventSource("/api/events")
+    es.addEventListener("update", (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent).data)
+        if (parsed?.type === "announcements.updated") {
+          fetchAnnouncements(true)
+        }
+      } catch {
+        // noop
+      }
+    })
+    return () => es.close()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated])
+
   const fetchAnnouncements = async (force = false) => {
     // Don't fetch if not authenticated (unless forced)
     if (!isAuthenticated && !force) {
@@ -244,11 +286,31 @@ export default function AnnouncementsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      console.log("Submitting announcement:", formData)
+      let uploadedImageUrl: string | null = null
+      if (imageFile) {
+        const uploadData = new FormData()
+        uploadData.append("file", imageFile)
+        uploadData.append("type", "announcement")
+
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          credentials: "same-origin",
+          body: uploadData,
+        })
+        const uploadJson = await uploadRes.json()
+        if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.url) {
+          console.error("Announcement image upload failed:", uploadJson)
+          return
+        }
+        uploadedImageUrl = uploadJson.data.url
+      }
+
+      const payload = { ...formData, image_url: uploadedImageUrl }
+      console.log("Submitting announcement:", payload)
       const res = await fetch("/api/announcements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
         credentials: "same-origin",
       })
 
@@ -264,6 +326,11 @@ export default function AnnouncementsPage() {
       if (res.ok) {
         setIsDialogOpen(false)
         setFormData({ title: "", content: "", type: "general", priority: "medium", author: "Admin", image_url: null, location: "" })
+        setImageFile(null)
+        if (imagePreviewUrl) {
+          URL.revokeObjectURL(imagePreviewUrl)
+          setImagePreviewUrl(null)
+        }
         // Don't refetch - just add the new announcement to state
         const newAnnouncement = resData
         if (newAnnouncement?.data) {
@@ -297,12 +364,12 @@ export default function AnnouncementsPage() {
     }
   }
 
-  const handleMarkResolved = async (id: string, newStatus: "active" | "resolved") => {
+  const handleMarkResolved = async (id: string) => {
     try {
       const res = await fetch(`/api/announcements/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: "resolved" }),
         credentials: "same-origin",
       })
       if (res.status === 401) {
@@ -479,7 +546,7 @@ export default function AnnouncementsPage() {
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={!(formData.content.trim().length > 0 || formData.image_url)}>
+                  <Button type="submit" disabled={!(formData.content.trim().length > 0 || imageFile)}>
                     Post
                   </Button>
                 </DialogFooter>
@@ -511,7 +578,11 @@ export default function AnnouncementsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleMarkResolved(announcement.id, (announcement as any).status === "resolved" ? "active" : "resolved")}
+                        onClick={() => {
+                          setAnnouncementToResolve(announcement.id)
+                          setResolveConfirmOpen(true)
+                        }}
+                        disabled={(announcement as any).status === "resolved"}
                         className={`${(announcement as any).status === "resolved" ? "bg-green-50 text-green-700 border-green-200" : "text-amber-700 border-amber-200"}`}
                       >
                         {(announcement as any).status === "resolved" ? "✓ Resolved" : "Mark Resolved"}
@@ -525,7 +596,7 @@ export default function AnnouncementsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{announcement.content}</p>
-                {announcement.imageUrl && typeof announcement.imageUrl === "string" && announcement.imageUrl.startsWith("data:image") ? (
+                {isRenderableAnnouncementImage(announcement.imageUrl) ? (
                   <div className="mt-3">
                     <img src={announcement.imageUrl} alt={announcement.title} className="w-full max-h-72 object-cover rounded" />
                   </div>
@@ -549,6 +620,30 @@ export default function AnnouncementsPage() {
           ))}
         </div>
       </main>
+
+      <AlertDialog open={resolveConfirmOpen} onOpenChange={setResolveConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark announcement as resolved?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will finalize the emergency announcement and it can no longer be edited.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!announcementToResolve) return
+                const target = announcementToResolve
+                setAnnouncementToResolve(null)
+                await handleMarkResolved(target)
+              }}
+            >
+              Yes, resolve it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

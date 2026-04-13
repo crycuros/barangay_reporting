@@ -17,8 +17,9 @@ interface Certificate {
   type: string
   purpose: string
   status: string
-  requested_at: string
-  issued_at?: string
+  createdAt: string
+  processedAt?: string
+  adminNotes?: string | null
 }
 
 export default function CertificatesPage() {
@@ -35,6 +36,21 @@ export default function CertificatesPage() {
 
   useEffect(() => {
     loadData()
+  }, [])
+
+  useEffect(() => {
+    const es = new EventSource("/api/events")
+    es.addEventListener("update", (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent).data)
+        if (parsed?.type === "certificates.updated") {
+          loadData()
+        }
+      } catch {
+        // noop
+      }
+    })
+    return () => es.close()
   }, [])
 
   const loadData = async () => {
@@ -160,7 +176,7 @@ export default function CertificatesPage() {
                       <CardTitle className="text-lg">{cert.type.replace('-', ' ').toUpperCase()}</CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">Purpose: {cert.purpose}</p>
                     </div>
-                    {cert.status === 'issued' ? (
+                    {cert.status === 'ready' || cert.status === 'picked_up' ? (
                       <CheckCircle className="h-5 w-5 text-green-600" />
                     ) : (
                       <Clock className="h-5 w-5 text-orange-600" />
@@ -169,10 +185,10 @@ export default function CertificatesPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between">
-                    <Badge variant={cert.status === 'issued' ? 'default' : 'secondary'}>
-                      {cert.status}
+                    <Badge variant={cert.status === 'ready' || cert.status === 'picked_up' ? 'default' : cert.status === 'rejected' ? 'outline' : 'secondary'}>
+                      {cert.status === 'ready' ? 'ready for pickup' : cert.status === 'picked_up' ? 'picked up' : cert.status}
                     </Badge>
-                    {cert.status === 'issued' && (
+                    {cert.status === 'ready' && (
                       <Button size="sm" variant="outline">
                         <Download className="h-4 w-4 mr-2" />
                         Download
@@ -180,13 +196,16 @@ export default function CertificatesPage() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-4">
-                    Requested: {new Date(cert.requested_at).toLocaleDateString()}
+                    Requested: {new Date(cert.createdAt).toLocaleDateString()}
                   </p>
-                  {cert.issued_at && (
+                  {cert.processedAt && (
                     <p className="text-xs text-muted-foreground">
-                      Issued: {new Date(cert.issued_at).toLocaleDateString()}
+                      Processed: {new Date(cert.processedAt).toLocaleDateString()}
                     </p>
                   )}
+                  {cert.adminNotes ? (
+                    <p className="text-xs text-muted-foreground mt-2">Note: {cert.adminNotes}</p>
+                  ) : null}
                 </CardContent>
               </Card>
             ))}
@@ -209,9 +228,10 @@ export default function CertificatesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="barangay-clearance">Barangay Clearance</SelectItem>
-                  <SelectItem value="certificate-of-residency">Certificate of Residency</SelectItem>
-                  <SelectItem value="certificate-of-indigency">Certificate of Indigency</SelectItem>
+                  <SelectItem value="residency">Certificate of Residency</SelectItem>
+                  <SelectItem value="indigency">Certificate of Indigency</SelectItem>
                   <SelectItem value="business-permit">Business Permit</SelectItem>
+                  <SelectItem value="cedula">Cedula / CTC</SelectItem>
                 </SelectContent>
               </Select>
             </div>

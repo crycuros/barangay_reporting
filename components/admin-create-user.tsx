@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,19 @@ export function AdminCreateUser() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [currentRole, setCurrentRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const res = await fetch("/api/me", { credentials: "same-origin" })
+        const data = await res.json()
+        setCurrentRole(data?.data?.role || null)
+      } catch {
+        setCurrentRole(null)
+      }
+    })()
+  }, [])
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,6 +50,7 @@ export function AdminCreateUser() {
       setFullName("")
       setPassword("")
       setRole("official")
+      try { window.dispatchEvent(new Event("admin-users:updated")) } catch {}
     } catch (err: any) {
       setError(err?.message || "Failed to create user")
     } finally {
@@ -48,7 +62,11 @@ export function AdminCreateUser() {
     <Card>
       <CardHeader>
         <CardTitle>Create Official/Admin</CardTitle>
-        <CardDescription>Only admins can create new official/admin accounts</CardDescription>
+        <CardDescription>
+          {currentRole === "super_admin"
+            ? "Super Admin can create official and admin accounts"
+            : "Admins can create official accounts only"}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -79,7 +97,7 @@ export function AdminCreateUser() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="official">Official</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                {currentRole === "super_admin" && <SelectItem value="admin">Admin</SelectItem>}
               </SelectContent>
             </Select>
           </div>

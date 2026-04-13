@@ -11,6 +11,7 @@ interface PendingUser {
   full_name: string | null
   role: string
   approval_status: string
+  is_verified: boolean
   phone: string | null
   address: string | null
   zone: string | null
@@ -21,16 +22,22 @@ export function AdminUserApprovals() {
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [canApprove, setCanApprove] = useState(false)
 
   const fetchPendingUsers = async () => {
     try {
+      const meRes = await fetch("/api/me", { credentials: "same-origin" })
+      const meData = await meRes.json()
+      const isSuperAdmin = meData?.data?.role === "super_admin"
+      setCanApprove(isSuperAdmin)
+
       const res = await fetch("/api/admin/users", {
         credentials: "same-origin",
       })
       const data = await res.json()
       if (data.success) {
         const pending = data.data.filter(
-          (u: PendingUser) => u.role === "official" && u.approval_status === "pending"
+          (u: PendingUser) => u.role === "official" && (u.approval_status === "pending" || !u.is_verified)
         )
         setPendingUsers(pending)
       }
@@ -43,6 +50,9 @@ export function AdminUserApprovals() {
 
   useEffect(() => {
     fetchPendingUsers()
+    const refresh = () => { fetchPendingUsers() }
+    window.addEventListener("admin-users:updated", refresh)
+    return () => window.removeEventListener("admin-users:updated", refresh)
   }, [])
 
   const handleApproval = async (userId: string, action: "approve" | "reject") => {
@@ -113,7 +123,7 @@ export function AdminUserApprovals() {
                   size="sm"
                   variant="default"
                   onClick={() => handleApproval(user.id, "approve")}
-                  disabled={actionLoading === user.id}
+                  disabled={actionLoading === user.id || !canApprove}
                 >
                   {actionLoading === user.id ? "..." : "Approve"}
                 </Button>
@@ -121,13 +131,16 @@ export function AdminUserApprovals() {
                   size="sm"
                   variant="outline"
                   onClick={() => handleApproval(user.id, "reject")}
-                  disabled={actionLoading === user.id}
+                  disabled={actionLoading === user.id || !canApprove}
                 >
                   {actionLoading === user.id ? "..." : "Reject"}
                 </Button>
               </div>
             </div>
           ))}
+          {!canApprove && (
+            <p className="text-xs text-muted-foreground">Only Super Admin can approve or reject official registrations.</p>
+          )}
         </div>
       </CardContent>
     </Card>

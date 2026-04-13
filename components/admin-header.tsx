@@ -64,7 +64,11 @@ export function AdminHeader() {
           r.status === "pending" && ["crime", "missing_person", "missing-person", "fire", "medical", "disaster", "assault", "robbery", "hazard", "abuse"].includes(r.type)
         ).length || 0
         // Sound alarm for ALL pending reports (not just marked emergency)
-        const announcementsEmergencies = announcementsData?.data?.filter((a: any) => a.priority === "urgent" || a.type === "emergency").length || 0
+        const announcementsEmergencies = announcementsData?.data?.filter((a: any) => {
+          const isEmergency = a.priority === "urgent" || a.type === "emergency"
+          const isActive = String(a.status || "active").toLowerCase().trim() === "active"
+          return isEmergency && isActive
+        }).length || 0
 
         setNotificationCount(pendingReports)
         setEmergencyReportsCount(pendingReports)

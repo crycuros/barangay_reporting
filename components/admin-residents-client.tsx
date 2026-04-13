@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle2, Search, Users, Mail, Phone, MapPin } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 
 type Resident = {
   id: string
@@ -24,6 +25,21 @@ type Resident = {
   date_of_birth: string | null
 }
 
+type ResidentDetails = Resident & {
+  kyc: null | {
+    id_type: string | null
+    id_number: string | null
+    id_front_url: string | null
+    id_back_url: string | null
+    selfie_url: string | null
+    status: string | null
+    submitted_at: string | null
+    reviewed_at: string | null
+    rejection_reason: string | null
+    admin_notes: string | null
+  }
+}
+
 function getInitials(name: string | null, email: string) {
   if (name?.trim()) return name.trim().split(/\s+/).map((n) => n[0]).join("").toUpperCase().slice(0, 2)
   return email?.[0]?.toUpperCase() || "?"
@@ -34,6 +50,10 @@ export function AdminResidentsClient() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [verifiedFilter, setVerifiedFilter] = useState("all")
+  const [selectedResident, setSelectedResident] = useState<ResidentDetails | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [previewImage, setPreviewImage] = useState<{ src: string; label: string } | null>(null)
 
   const fetchResidents = useCallback(async () => {
     setLoading(true)
@@ -52,6 +72,24 @@ export function AdminResidentsClient() {
     const timer = setTimeout(fetchResidents, 300)
     return () => clearTimeout(timer)
   }, [fetchResidents])
+
+  const openResidentDetails = async (residentId: string) => {
+    setDetailsLoading(true)
+    setDetailsOpen(true)
+    try {
+      const res = await fetch(`/api/admin/residents/${residentId}`, { credentials: "same-origin" })
+      const data = await res.json()
+      if (data?.success && data?.data) {
+        setSelectedResident(data.data)
+      } else {
+        setSelectedResident(null)
+      }
+    } catch {
+      setSelectedResident(null)
+    } finally {
+      setDetailsLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -124,12 +162,101 @@ export function AdminResidentsClient() {
                         {r.zone && <span>Zone {r.zone}</span>}
                       </div>
                     </div>
+                    {r.is_verified ? (
+                      <Button size="sm" variant="outline" onClick={() => openResidentDetails(r.id)}>
+                        View Details
+                      </Button>
+                    ) : null}
                   </div>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
+
+        <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+          <DialogContent className="max-w-6xl">
+            <DialogHeader>
+              <DialogTitle>Resident Details</DialogTitle>
+              <DialogDescription>Profile and latest submitted KYC documents</DialogDescription>
+            </DialogHeader>
+            {detailsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading details...</p>
+            ) : !selectedResident ? (
+              <p className="text-sm text-muted-foreground">No details available.</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div><span className="font-medium">Name:</span> {selectedResident.full_name || "No name"}</div>
+                  <div><span className="font-medium">Email:</span> {selectedResident.email}</div>
+                  <div><span className="font-medium">Phone:</span> {selectedResident.phone || "N/A"}</div>
+                  <div><span className="font-medium">Date of Birth:</span> {selectedResident.date_of_birth || "N/A"}</div>
+                  <div><span className="font-medium">Address:</span> {selectedResident.address || "N/A"}</div>
+                  <div><span className="font-medium">Zone:</span> {selectedResident.zone || "N/A"}</div>
+                </div>
+
+                {selectedResident.kyc ? (
+                  <div className="space-y-3">
+                    <div className="text-sm">
+                      <span className="font-medium">KYC Status:</span> {selectedResident.kyc.status || selectedResident.kyc_status}
+                    </div>
+                    <div className="grid md:grid-cols-3 gap-3">
+                      {selectedResident.kyc.id_front_url ? (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">ID Front</p>
+                          <img
+                            src={selectedResident.kyc.id_front_url}
+                            alt="ID Front"
+                            className="w-full h-40 object-cover rounded border cursor-zoom-in hover:opacity-90 transition"
+                            onClick={() => setPreviewImage({ src: selectedResident.kyc!.id_front_url!, label: "ID Front" })}
+                          />
+                        </div>
+                      ) : null}
+                      {selectedResident.kyc.id_back_url ? (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">ID Back</p>
+                          <img
+                            src={selectedResident.kyc.id_back_url}
+                            alt="ID Back"
+                            className="w-full h-40 object-cover rounded border cursor-zoom-in hover:opacity-90 transition"
+                            onClick={() => setPreviewImage({ src: selectedResident.kyc!.id_back_url!, label: "ID Back" })}
+                          />
+                        </div>
+                      ) : null}
+                      {selectedResident.kyc.selfie_url ? (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Selfie</p>
+                          <img
+                            src={selectedResident.kyc.selfie_url}
+                            alt="Selfie"
+                            className="w-full h-40 object-cover rounded border cursor-zoom-in hover:opacity-90 transition"
+                            onClick={() => setPreviewImage({ src: selectedResident.kyc!.selfie_url!, label: "Selfie" })}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No KYC submission found for this resident.</p>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!previewImage} onOpenChange={(open) => { if (!open) setPreviewImage(null) }}>
+          <DialogContent className="w-[99vw] max-w-[99vw] h-[95vh] max-h-[95vh] p-3">
+            <DialogHeader>
+              <DialogTitle>{previewImage?.label || "Document Preview"}</DialogTitle>
+              <DialogDescription>Click outside to close preview</DialogDescription>
+            </DialogHeader>
+            {previewImage ? (
+              <div className="flex-1 h-full overflow-auto flex items-center justify-center">
+                <img src={previewImage.src} alt={previewImage.label} className="max-w-full max-h-[88vh] object-contain rounded border" />
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   )
