@@ -57,7 +57,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         [announcementId, userId]
       ))
 
-      return NextResponse.json({ success: true, data: updated, userHasLiked })
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: String(updated.id),
+          title: updated.title,
+          content: updated.content,
+          type: updated.type,
+          priority: updated.priority,
+          author: updated.author,
+          isActive: Boolean(updated.is_active),
+          status: updated.status || "active",
+          createdAt: updated.created_at,
+          created_at: updated.created_at,
+          updatedAt: updated.updated_at,
+          imageUrl: updated.image_url || null,
+          likes: typeof updated.likes === "number" ? updated.likes : Number(updated.likes) || 0,
+          location: updated.location || null,
+        },
+        userHasLiked,
+      })
     }
 
     const fields: string[] = []
@@ -86,7 +105,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     await execute(`UPDATE announcements SET ${fields.join(", ")} WHERE id = ?`, values)
 
     const updated = await queryOne("SELECT * FROM announcements WHERE id = ?", [id])
-    return NextResponse.json({ success: true, data: updated })
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: String(updated.id),
+        title: updated.title,
+        content: updated.content,
+        type: updated.type,
+        priority: updated.priority,
+        author: updated.author,
+        isActive: Boolean(updated.is_active),
+        status: updated.status || "active",
+        createdAt: updated.created_at,
+        created_at: updated.created_at,
+        updatedAt: updated.updated_at,
+        imageUrl: updated.image_url || null,
+        likes: typeof updated.likes === "number" ? updated.likes : Number(updated.likes) || 0,
+        location: updated.location || null,
+      },
+    })
   } catch (e) {
     console.error("Announcements PATCH error:", e)
     return NextResponse.json({ success: false, error: "Failed to update" }, { status: 500 })

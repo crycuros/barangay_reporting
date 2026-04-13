@@ -174,9 +174,9 @@ export default function AnnouncementsPage() {
                 <CardContent>
                   <p className="text-sm text-muted-foreground mb-4 whitespace-pre-wrap">{announcement.content}</p>
                   
-                  {announcement.imageUrl && (
+                  {announcement.imageUrl && typeof announcement.imageUrl === "string" && announcement.imageUrl.startsWith("data:image") ? (
                     <img 
-                      src={String(announcement.imageUrl)} 
+                      src={announcement.imageUrl} 
                       alt={announcement.title}
                       className="w-full h-64 object-cover rounded-lg mb-4"
                     />

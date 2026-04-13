@@ -525,9 +525,9 @@ export default function AnnouncementsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{announcement.content}</p>
-                {announcement.imageUrl ? (
+                {announcement.imageUrl && typeof announcement.imageUrl === "string" && announcement.imageUrl.startsWith("data:image") ? (
                   <div className="mt-3">
-                    <img src={String(announcement.imageUrl)} alt={announcement.title} className="w-full max-h-72 object-cover rounded" />
+                    <img src={announcement.imageUrl} alt={announcement.title} className="w-full max-h-72 object-cover rounded" />
                   </div>
                 ) : null}
                 {announcement.location ? (
