@@ -108,8 +108,6 @@ export function DashboardContent() {
         return "outline"
     }
   }
-    }
-  }
 
   const reportAnalytics = stats ? {
     pendingRate: stats.reports.total > 0 ? ((stats.reports.pending / stats.reports.total) * 100).toFixed(1) : 0,
