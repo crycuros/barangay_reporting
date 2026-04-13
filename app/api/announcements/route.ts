@@ -54,17 +54,25 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("=== Announcements POST ===")
     const token = getSessionFromRequest(request.cookies, request.headers)
+    console.log("Token present:", !!token)
     const session = token ? await verifySession(token) : null
+    console.log("Session:", session?.sub, session?.role)
+    
     if (!session || (session.role !== "admin" && session.role !== "official")) {
+      console.log("Unauthorized - role:", session?.role)
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
+    console.log("Creating announcement:", body.title)
+    
     const result = await execute(
       "INSERT INTO announcements (title, content, type, priority, author, image_url, likes, location, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [body.title, body.content, body.type || "general", body.priority || "normal", body.author || "Official", body.image_url || null, body.likes || 0, body.location || null, body.status || "active"]
     )
+    console.log("Insert result:", result)
 
     return NextResponse.json({
       success: true,

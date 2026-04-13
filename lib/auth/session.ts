@@ -49,6 +49,8 @@ export function getSessionFromRequest(
 ): string | null {
   // Try to get from Next.js cookies API first (for web browsers)
   const cookie = cookies.get(getSessionCookieName())
+  console.log("getSessionFromRequest - cookie name:", getSessionCookieName())
+  console.log("getSessionFromRequest - cookie value:", cookie?.value ? "present" : "not present")
   if (cookie?.value) {
     return cookie.value
   }
@@ -63,6 +65,7 @@ export function getSessionFromRequest(
     
     // Fallback: Parse from raw Cookie header (for cross-origin web requests)
     const cookieHeader = headers.get('cookie')
+    console.log("getSessionFromRequest - raw cookie header:", cookieHeader)
     if (cookieHeader) {
       const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${getSessionCookieName()}=([^;]+)`))
       if (match) {

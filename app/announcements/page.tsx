@@ -181,18 +181,26 @@ export default function AnnouncementsPage() {
     // First check user role, then fetch announcements
     ;(async () => {
       try {
+        console.log("Checking auth status...")
         const res = await fetch("/api/me", { credentials: "same-origin" })
-        if (!res.ok) return
+        console.log("/api/me status:", res.status)
+        if (!res.ok) {
+          console.log("Not authenticated, redirecting to login")
+          router.push("/admin-login")
+          return
+        }
         const json = await res.json()
+        console.log("/api/me response:", json)
         if (json?.data?.role) {
           setUserRole(json.data.role)
           setIsAuthenticated(true)
+          console.log("User authenticated, role:", json.data.role)
           
           // Only fetch announcements if authenticated
           await fetchAnnouncements()
         }
-      } catch {
-        // noop
+      } catch (error) {
+        console.error("Auth check error:", error)
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,17 +209,24 @@ export default function AnnouncementsPage() {
   const fetchAnnouncements = async () => {
     // Don't fetch if not authenticated
     if (!isAuthenticated) {
+      console.log("Not authenticated, skipping fetch")
       return
     }
     
     try {
+      console.log("Fetching announcements...")
       const res = await fetch("/api/announcements", { credentials: "same-origin" })
+      console.log("/api/announcements status:", res.status)
       if (res.status === 401) {
         router.push("/admin-login")
         return
       }
-      if (!res.ok) return
+      if (!res.ok) {
+        console.log("Fetch failed")
+        return
+      }
       const data = await res.json()
+      console.log("Announcements data:", data)
       if (data?.data) {
         setAnnouncements(data.data)
         
@@ -229,12 +244,17 @@ export default function AnnouncementsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      console.log("Submitting announcement:", formData)
       const res = await fetch("/api/announcements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
         credentials: "same-origin",
       })
+
+      console.log("POST /api/announcements status:", res.status)
+      const resData = await res.json()
+      console.log("POST response:", resData)
 
       if (res.status === 401) {
         router.push("/admin-login")
@@ -245,15 +265,15 @@ export default function AnnouncementsPage() {
         setIsDialogOpen(false)
         setFormData({ title: "", content: "", type: "general", priority: "medium", author: "Admin", image_url: null, location: "" })
         // Don't refetch - just add the new announcement to state
-        const newAnnouncement = await res.json()
+        const newAnnouncement = resData
         if (newAnnouncement?.data) {
           setAnnouncements(prev => [newAnnouncement.data, ...prev])
         }
         // Don't dispatch event to prevent other components from refetching
         // try { window.dispatchEvent(new Event("announcements:updated")) } catch (e) {}
       }
-    } catch {
-      // noop
+    } catch (error) {
+      console.error("Submit error:", error)
     }
   }
 

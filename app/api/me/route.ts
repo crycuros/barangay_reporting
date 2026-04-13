@@ -13,12 +13,16 @@ export async function GET(request: NextRequest) {
   const headers = getCorsHeaders(origin)
 
   try {
+    console.log("=== /api/me GET ===")
     const token = getSessionFromRequest(request.cookies, request.headers)
+    console.log("Token present:", !!token)
     if (!token) {
+      console.log("No token, returning 401")
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
 
     const session = await verifySession(token)
+    console.log("Session verified:", session?.sub, session?.role)
     if (!session) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401, headers })
     }
