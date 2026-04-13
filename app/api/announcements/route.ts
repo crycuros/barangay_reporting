@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     
     const rows = await queryAll<any>("SELECT * FROM announcements ORDER BY created_at DESC", [])
     console.log("Found announcements:", rows.length)
+    console.log("Sample image_url:", rows[0]?.image_url)
     
     // If user is resident, fetch their liked announcements using the standard pattern
     let userLikedAnnouncements: string[] = []
@@ -67,12 +68,14 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     console.log("Creating announcement:", body.title)
+    console.log("Image URL present:", !!body.image_url)
     
     const result = await execute(
       "INSERT INTO announcements (title, content, type, priority, author, image_url, likes, location, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [body.title, body.content, body.type || "general", body.priority || "normal", body.author || "Official", body.image_url || null, body.likes || 0, body.location || null, body.status || "active"]
     )
     console.log("Insert result:", result)
+    console.log("Saved image_url:", body.image_url ? "yes" : "no")
 
     return NextResponse.json({
       success: true,
