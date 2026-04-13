@@ -176,7 +176,7 @@ export default function AnnouncementsPage() {
                   
                   {announcement.imageUrl && (
                     <img 
-                      src={announcement.imageUrl} 
+                      src={String(announcement.imageUrl)} 
                       alt={announcement.title}
                       className="w-full h-64 object-cover rounded-lg mb-4"
                     />

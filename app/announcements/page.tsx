@@ -527,7 +527,7 @@ export default function AnnouncementsPage() {
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{announcement.content}</p>
                 {announcement.imageUrl ? (
                   <div className="mt-3">
-                    <img src={announcement.imageUrl} alt={announcement.title} className="w-full max-h-72 object-cover rounded" />
+                    <img src={String(announcement.imageUrl)} alt={announcement.title} className="w-full max-h-72 object-cover rounded" />
                   </div>
                 ) : null}
                 {announcement.location ? (
