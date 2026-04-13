@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Send, Loader2, MapPin, User, Phone, Calendar } from "lucide-react"
+import { Send, Loader2, MapPin, User, Phone, Calendar, ImagePlus, Camera, X } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -29,6 +29,7 @@ interface Message {
   user_name: string
   user_role: string | null
   message: string
+  image_url?: string | null
   is_system_message: boolean
   created_at: string
 }
@@ -61,7 +62,13 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   const [currentStatus, setCurrentStatus] = useState(report.status)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const scrollAreaContainerRef = useRef<HTMLDivElement>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const lastMessageIdRef = useRef<string | null>(null)
 
   const isEmergencyReport = ["crime", "missing-person", "missing_person", "fire", "medical", "disaster", "assault", "robbery", "hazard"].includes(report.type)
   const isFinalStatus = currentStatus === "closed"
@@ -73,8 +80,15 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
     }
   }
 
+  const isNearBottom = () => {
+    const viewport = scrollAreaContainerRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement | null
+    if (!viewport) return true
+    return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80
+  }
+
   // Fetch messages
-  const fetchMessages = async () => {
+  const fetchMessages = async (forceScroll = false) => {
+    const nearBottom = isNearBottom()
     try {
       const res = await fetch(`/api/reports/${report.id}/messages`, {
         credentials: "same-origin",
@@ -82,8 +96,14 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
       })
       const data = await res.json()
       if (data.success) {
-        setMessages(data.data)
-        setTimeout(scrollToBottom, 50)
+        const nextMessages: Message[] = data.data || []
+        const nextLastId = nextMessages.length > 0 ? nextMessages[nextMessages.length - 1].id : null
+        const hasNewMessage = nextLastId !== lastMessageIdRef.current
+        setMessages(nextMessages)
+        lastMessageIdRef.current = nextLastId
+        if (forceScroll || (hasNewMessage && nearBottom)) {
+          setTimeout(scrollToBottom, 50)
+        }
       }
     } catch (error) {
       console.error("Failed to fetch messages:", error)
@@ -92,30 +112,59 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
 
   // Send message
   const sendMessage = async () => {
-    if (!newMessage.trim()) return
+    if (!newMessage.trim() && !selectedImageFile) return
 
     setSending(true)
     const messageToSend = newMessage.trim()
     try {
+      let uploadedImageUrl: string | null = null
+      if (selectedImageFile) {
+        setUploadingImage(true)
+        const form = new FormData()
+        form.append("file", selectedImageFile)
+        form.append("type", "report_message")
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          credentials: "same-origin",
+          body: form,
+        })
+        const uploadJson = await uploadRes.json().catch(() => null)
+        if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.url) {
+          alert(uploadJson?.error || "Failed to upload photo")
+          return
+        }
+        uploadedImageUrl = String(uploadJson.data.url)
+      }
+
       const res = await fetch(`/api/reports/${report.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ message: messageToSend })
+        body: JSON.stringify({ message: messageToSend, imageUrl: uploadedImageUrl })
       })
 
       if (res.ok) {
         setNewMessage("")
+        setSelectedImageFile(null)
+        setSelectedImagePreview(null)
       } else {
         const data = await res.json().catch(() => null)
         alert(data?.error || "Failed to send message")
       }
-      await fetchMessages()
+      await fetchMessages(true)
     } catch (error) {
       console.error("Failed to send message:", error)
     } finally {
+      setUploadingImage(false)
       setSending(false)
     }
+  }
+
+  const handleSelectImage = (file: File | null) => {
+    if (!file) return
+    const preview = URL.createObjectURL(file)
+    setSelectedImageFile(file)
+    setSelectedImagePreview(preview)
   }
 
   // Update status
@@ -161,15 +210,9 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   useEffect(() => {
     if (open) {
       setLoading(true)
-      fetchMessages().finally(() => setLoading(false))
+      fetchMessages(true).finally(() => setLoading(false))
     }
   }, [open, report.id])
-
-  useEffect(() => {
-    if (open) {
-      setTimeout(scrollToBottom, 50)
-    }
-  }, [messages, open])
 
   // Live updates via SSE
   useEffect(() => {
@@ -309,7 +352,10 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
                     <div className={`rounded-lg px-4 py-2 ${getMessageBgColor(msg)} ${
                       msg.is_system_message ? "text-sm italic" : ""
                     }`}>
-                      {msg.message}
+                      {msg.message ? <p>{msg.message}</p> : null}
+                      {msg.image_url ? (
+                        <img src={msg.image_url} alt="attachment" className={`rounded-md max-h-56 object-cover ${msg.message ? "mt-2" : ""}`} />
+                      ) : null}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">
                       {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
@@ -323,7 +369,46 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
         </div>
 
         {/* Input Area */}
-        <div className="border-t pt-4 flex gap-2">
+        <div className="border-t pt-4 space-y-2">
+          {selectedImagePreview && (
+            <div className="relative inline-block">
+              <img src={selectedImagePreview} alt="selected attachment" className="max-h-32 rounded-md border" />
+              <Button
+                type="button"
+                size="icon"
+                variant="secondary"
+                className="absolute -top-2 -right-2 h-6 w-6"
+                onClick={() => {
+                  setSelectedImageFile(null)
+                  setSelectedImagePreview(null)
+                }}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+          <div className="flex gap-2">
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleSelectImage(e.target.files?.[0] || null)}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => handleSelectImage(e.target.files?.[0] || null)}
+          />
+          <Button type="button" variant="outline" size="icon" onClick={() => uploadInputRef.current?.click()} disabled={sending || uploadingImage}>
+            <ImagePlus className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="outline" size="icon" onClick={() => cameraInputRef.current?.click()} disabled={sending || uploadingImage}>
+            <Camera className="h-4 w-4" />
+          </Button>
           <Input
             placeholder="Type your message..."
             value={newMessage}
@@ -334,11 +419,12 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
                 sendMessage()
               }
             }}
-            disabled={sending}
+            disabled={sending || uploadingImage}
           />
-          <Button onClick={sendMessage} disabled={sending || !newMessage.trim()}>
+          <Button onClick={sendMessage} disabled={sending || uploadingImage || (!newMessage.trim() && !selectedImageFile)}>
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
+          </div>
         </div>
       </DialogContent>
 
