@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     
     const rows = await queryAll<any>("SELECT * FROM announcements ORDER BY created_at DESC", [])
     console.log("Found announcements:", rows.length)
-    console.log("Sample image_url:", rows[0]?.image_url)
+    console.log("Sample row:", rows[0] ? { id: rows[0].id, title: rows[0].title, image_url: rows[0].image_url } : "no rows")
     
     // If user is resident, fetch their liked announcements using the standard pattern
     let userLikedAnnouncements: string[] = []
