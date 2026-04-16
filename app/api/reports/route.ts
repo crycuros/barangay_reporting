@@ -3,6 +3,19 @@ import { queryAll, execute } from "@/lib/db"
 import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { getCorsHeaders, handleOptions } from "@/lib/cors"
 import { publishEvent } from "@/lib/server/realtime"
+import { writeFile, mkdir } from "fs/promises"
+import { existsSync } from "fs"
+import path from "path"
+
+// Auto-add lat/lng columns once per server process
+const g = globalThis as typeof globalThis & { __reportsMigrated?: boolean }
+if (!g.__reportsMigrated) {
+  g.__reportsMigrated = true
+  Promise.all([
+    execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7) NULL", []),
+    execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7) NULL", []),
+  ]).catch(() => {/* columns may already exist */})
+}
 
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get("origin") || undefined
@@ -86,6 +99,8 @@ export async function GET(request: NextRequest) {
         title: r.title,
         description: r.description,
         location: r.location,
+        latitude: (r as any).latitude ? Number((r as any).latitude) : null,
+        longitude: (r as any).longitude ? Number((r as any).longitude) : null,
         reporterName: r.reporter_name,
         reporterContact: r.reporter_contact,
         status: r.status,
@@ -119,6 +134,8 @@ export async function POST(request: NextRequest) {
     let type = "", title = "", description = "", location = "", reporterName = "", reporterContact = ""
     let imageData: string | null = null
     let status = "pending"
+    let latitude: number | null = null
+    let longitude: number | null = null
 
     const contentType = request.headers.get("content-type") || ""
     if (contentType.includes("multipart/form-data")) {
@@ -129,11 +146,25 @@ export async function POST(request: NextRequest) {
       location = (formData.get("location") as string) || ""
       reporterName = (formData.get("reporterName") as string) || "Anonymous"
       reporterContact = (formData.get("reporterContact") as string) || ""
+      const latVal = formData.get("latitude") as string | null
+      const lngVal = formData.get("longitude") as string | null
+      if (latVal && lngVal) {
+        latitude = parseFloat(latVal)
+        longitude = parseFloat(lngVal)
+      }
 
       const file = formData.get("image") as File | null
-      if (file && file.size > 0 && file.size < 2_000_000) {
-        const buf = Buffer.from(await file.arrayBuffer())
-        imageData = `data:${file.type};base64,${buf.toString("base64")}`
+      if (file && file.size > 0 && file.size <= 2_000_000) {
+        const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
+        if (allowedTypes.includes(file.type)) {
+          const uploadDir = path.join(process.cwd(), "public", "uploads", "reports", String(session.sub))
+          if (!existsSync(uploadDir)) await mkdir(uploadDir, { recursive: true })
+          const ext = file.name.split(".").pop() || "jpg"
+          const fileName = `report_${Date.now()}.${ext}`
+          const filePath = path.join(uploadDir, fileName)
+          await writeFile(filePath, Buffer.from(await file.arrayBuffer()))
+          imageData = `/uploads/reports/${session.sub}/${fileName}`
+        }
       }
     } else {
       const body = await request.json()
@@ -143,18 +174,21 @@ export async function POST(request: NextRequest) {
       location = body.location || ""
       reporterName = body.reporterName || "Anonymous"
       reporterContact = body.reporterContact || ""
+      latitude = body.latitude != null ? Number(body.latitude) : null
+      longitude = body.longitude != null ? Number(body.longitude) : null
     }
 
     const isEmergencyType = type === "crime" || type === "missing_person"
-    status = isEmergencyType ? "pending" : "in-progress"
+    const isPendingType = isEmergencyType || type === "other"
+    status = isPendingType ? "pending" : "in-progress"
 
     if (!title.trim()) {
       return NextResponse.json({ success: false, error: "Title is required" }, { status: 400, headers })
     }
 
     const result = await execute(
-      "INSERT INTO reports (user_id, type, title, description, location, reporter_name, reporter_contact, status, image_url, unread_by_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [session.sub, type, title, description, location, reporterName, reporterContact, status, imageData, 1]
+      "INSERT INTO reports (user_id, type, title, description, location, latitude, longitude, reporter_name, reporter_contact, status, image_url, unread_by_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [session.sub, type, title, description, location, latitude, longitude, reporterName, reporterContact, status, imageData, 1]
     )
     publishEvent("reports.updated", { action: "created", id: String(result.insertId) })
 
@@ -162,7 +196,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         id: String(result.insertId),
-        type, title, description, location,
+        type, title, description, location, latitude, longitude,
         reporterName, reporterContact,
         status: "pending",
         createdAt: new Date().toISOString(),

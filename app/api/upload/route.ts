@@ -104,26 +104,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid file type. Only JPEG, PNG, and WebP are allowed." }, { status: 400, headers })
     }
 
-    // Validate image dimensions
     const buffer = Buffer.from(await file.arrayBuffer())
-    const dimensions = getImageDimensions(buffer)
-    
-    if (!dimensions) {
-      return NextResponse.json({ success: false, error: "Invalid image file. Please upload a valid photo." }, { status: 400, headers })
-    }
 
-    // Validate based on type (ID or selfie)
-    if (type === 'id_front' || type === 'id_back' || type === 'selfie') {
+    // Validate image dimensions only for KYC uploads
+    const isKycType = type === 'id_front' || type === 'id_back' || type === 'selfie'
+    if (isKycType) {
+      const dimensions = getImageDimensions(buffer)
+      if (!dimensions) {
+        return NextResponse.json({ success: false, error: "Invalid image file. Please upload a valid photo." }, { status: 400, headers })
+      }
       const validation = validateIDImage(dimensions.width, dimensions.height, type)
       if (!validation.valid) {
         return NextResponse.json({ success: false, error: validation.error }, { status: 400, headers })
       }
     }
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "kyc", userId)
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true })
-    }
+    const subFolder = isKycType ? "kyc" : "messages"
+    const uploadDir = path.join(process.cwd(), "public", "uploads", subFolder, userId)
+    if (!existsSync(uploadDir)) await mkdir(uploadDir, { recursive: true })
 
     const ext = file.name.split(".").pop() || "jpg"
     const fileName = `${type || "file"}_${Date.now()}.${ext}`
@@ -131,9 +129,9 @@ export async function POST(request: NextRequest) {
 
     await writeFile(filePath, buffer)
 
-    const url = `/uploads/kyc/${userId}/${fileName}`
+    const url = `/uploads/${subFolder}/${userId}/${fileName}`
 
-    console.log("File uploaded:", url, "Dimensions:", dimensions)
+    console.log("File uploaded:", url)
 
     return NextResponse.json({ success: true, data: { url } }, { headers })
   } catch (e) {

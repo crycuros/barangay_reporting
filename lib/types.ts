@@ -11,6 +11,7 @@ export interface Announcement {
   createdAt: string
   updatedAt: string
   author: string
+  authorAvatarUrl?: string | null
   isActive: boolean
   status: "active" | "resolved"
   imageUrl?: string | null

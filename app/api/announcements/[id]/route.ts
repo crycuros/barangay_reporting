@@ -114,9 +114,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     values.push(id)
     await execute(`UPDATE announcements SET ${fields.join(", ")} WHERE id = ?`, values)
-    publishEvent("announcements.updated", { action: "updated", id: String(id) })
-
-    const updated = await queryOne("SELECT * FROM announcements WHERE id = ?", [id])
+    const updated = await queryOne<any>(
+      `SELECT a.*, u.avatar_url AS author_avatar_url, u.full_name AS author_full_name
+       FROM announcements a LEFT JOIN users u ON u.id = a.posted_by_user_id
+       WHERE a.id = ?`,
+      [id]
+    )
+    publishEvent("announcements.updated", { action: "updated", id: String(id), title: updated?.title || "", content: updated?.content || "" })
     return NextResponse.json({
       success: true,
       data: {
@@ -125,7 +129,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         content: updated.content,
         type: updated.type,
         priority: updated.priority,
-        author: updated.author,
+        author: updated.author_full_name || updated.author,
+        authorAvatarUrl: updated.author_avatar_url || null,
         isActive: Boolean(updated.is_active),
         status: updated.status || "active",
         createdAt: updated.created_at,
@@ -151,8 +156,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     const { id } = await params
+    const toDelete = await queryOne<{ title: string }>("SELECT title FROM announcements WHERE id = ?", [id])
     await execute("DELETE FROM announcements WHERE id = ?", [id])
-    publishEvent("announcements.updated", { action: "deleted", id: String(id) })
+    publishEvent("announcements.updated", { action: "deleted", id: String(id), title: toDelete?.title || "" })
     return NextResponse.json({ success: true, message: "Deleted" })
   } catch (e) {
     console.error("Announcements DELETE error:", e)

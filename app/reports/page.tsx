@@ -556,6 +556,7 @@ export default function ReportsPage() {
               reporterName: chatReport.reporterName,
               reporterContact: chatReport.reporterContact,
               createdAt: chatReport.createdAt,
+              images: chatReport.images,
             }}
             currentUserRole={role || "resident"}
           />

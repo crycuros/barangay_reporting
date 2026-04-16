@@ -6,7 +6,13 @@ type RealtimeEvent = {
 
 type Listener = (event: RealtimeEvent) => void
 
-const listeners = new Set<Listener>()
+// Use globalThis so all Next.js route modules share the same Set instance,
+// even when modules are evaluated separately (avoids the split-instance problem).
+const g = globalThis as typeof globalThis & { __realtimeListeners?: Set<Listener> }
+if (!g.__realtimeListeners) {
+  g.__realtimeListeners = new Set<Listener>()
+}
+const listeners = g.__realtimeListeners
 
 export function publishEvent(type: string, payload?: Record<string, unknown>) {
   const event: RealtimeEvent = { type, payload, ts: Date.now() }

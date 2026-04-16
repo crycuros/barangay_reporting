@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server"
 import { subscribeEvents } from "@/lib/server/realtime"
 
+// Prevent Next.js from statically caching this streaming route
+export const dynamic = "force-dynamic"
+
 export async function GET(request: NextRequest) {
   const encoder = new TextEncoder()
   let closed = false

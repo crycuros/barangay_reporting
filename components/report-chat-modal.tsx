@@ -44,6 +44,7 @@ interface Report {
   reporterName?: string
   reporterContact?: string
   createdAt?: string
+  images?: string[]
 }
 
 interface ReportChatModalProps {
@@ -65,6 +66,8 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
   const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const scrollAreaContainerRef = useRef<HTMLDivElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -248,6 +251,7 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl h-[700px] flex flex-col">
         <DialogHeader>
@@ -268,6 +272,15 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
         <div className="px-1 py-2 bg-muted/50 rounded-lg space-y-2 text-sm">
           {report.description && (
             <p className="text-sm">{report.description}</p>
+          )}
+          {report.images && report.images.length > 0 && (
+            <button
+              className="flex items-center gap-1.5 text-xs text-blue-600 underline underline-offset-2 hover:opacity-80 transition-opacity"
+              onClick={() => { setLightboxUrl(report.images![0]); setLightboxOpen(true) }}
+            >
+              <ImagePlus className="h-3.5 w-3.5 shrink-0" />
+              View attached photo
+            </button>
           )}
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
             {report.location && (
@@ -306,7 +319,7 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {isEmergencyReport && <SelectItem value="pending">Pending</SelectItem>}
+                <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="in-progress">In Progress</SelectItem>
                 <SelectItem value="resolved">Resolved</SelectItem>
                 <SelectItem value="closed">Closed</SelectItem>
@@ -354,7 +367,12 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
                     }`}>
                       {msg.message ? <p>{msg.message}</p> : null}
                       {msg.image_url ? (
-                        <img src={msg.image_url} alt="attachment" className={`rounded-md max-h-56 object-cover ${msg.message ? "mt-2" : ""}`} />
+                        <img
+                          src={msg.image_url}
+                          alt="attachment"
+                          className={`rounded-md max-h-48 object-cover cursor-zoom-in ${msg.message ? "mt-2" : ""}`}
+                          onClick={() => { setLightboxUrl(msg.image_url!); setLightboxOpen(true) }}
+                        />
                       ) : null}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">
@@ -454,5 +472,26 @@ export function ReportChatModal({ open, onOpenChange, report, currentUserRole }:
         </AlertDialogContent>
       </AlertDialog>
     </Dialog>
+
+    {lightboxOpen && lightboxUrl && (
+      <div
+        className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center"
+        onClick={() => { setLightboxOpen(false); setLightboxUrl(null) }}
+      >
+        <button
+          className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/80 transition-colors"
+          onClick={() => { setLightboxOpen(false); setLightboxUrl(null) }}
+        >
+          <X className="h-6 w-6" />
+        </button>
+        <img
+          src={lightboxUrl}
+          alt="full size"
+          className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          onClick={() => { setLightboxOpen(false); setLightboxUrl(null) }}
+        />
+      </div>
+    )}
+    </>
   )
 }

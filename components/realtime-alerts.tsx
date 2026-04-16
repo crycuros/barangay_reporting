@@ -43,7 +43,16 @@ export function RealtimeAlerts() {
           if (action === "created" && (role === "admin" || role === "official")) {
             toast({ title: "New report received", description: "A resident submitted a new report." })
           } else if (action === "message_sent") {
-            toast({ title: "New report message", description: "A new message was posted in report chat." })
+            const senderRole = String(evt?.payload?.senderRole || "")
+            const preview = String(evt?.payload?.preview || "")
+            // Only notify the opposite party
+            const isSenderAdmin = senderRole === "admin" || senderRole === "official"
+            const isSenderResident = !isSenderAdmin
+            if (isSenderResident && (role === "admin" || role === "official")) {
+              toast({ title: "New message from resident", description: preview || "A resident replied to a report." })
+            } else if (isSenderAdmin && role === "resident") {
+              toast({ title: "New reply on your report", description: preview || "An admin replied to your report." })
+            }
           }
           return
         }
@@ -57,8 +66,25 @@ export function RealtimeAlerts() {
           return
         }
 
-        if (type === "announcements.updated" && role === "resident") {
-          toast({ title: "New announcement update", description: "Barangay announcements were updated." })
+        if (type === "announcements.updated") {
+          const title = String(evt?.payload?.title || "")
+          const content = String(evt?.payload?.content || "")
+          const preview = content.length > 80 ? content.slice(0, 80).trimEnd() + "..." : content
+          if (action === "created") {
+            toast({
+              title: `${title || "Bagong Announcement"}`,
+              description: preview || undefined,
+            })
+          } else if (action === "updated" && (role === "admin" || role === "official")) {
+            toast({
+              title: `Updated: ${title || "Announcement"}`,
+              description: preview || undefined,
+            })
+          } else if (action === "deleted" && (role === "admin" || role === "official")) {
+            toast({
+              title: `Deleted: ${title || "Announcement"}`,
+            })
+          }
           return
         }
       },

@@ -11,6 +11,7 @@ async function ensureReportMessagesTable() {
       report_id INT NOT NULL,
       user_id INT NULL,
       message TEXT NOT NULL,
+      image_url TEXT NULL,
       is_system_message BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
@@ -20,6 +21,8 @@ async function ensureReportMessagesTable() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     []
   )
+  // Add image_url if missing (for existing tables)
+  await execute("ALTER TABLE report_messages ADD COLUMN IF NOT EXISTS image_url TEXT NULL", []).catch(() => {})
 }
 
 export async function OPTIONS(request: NextRequest) {
@@ -61,7 +64,8 @@ export async function GET(
         rm.id, 
         rm.report_id, 
         rm.user_id, 
-        rm.message, 
+        rm.message,
+        rm.image_url,
         rm.is_system_message, 
         rm.created_at,
         u.full_name as user_name,
@@ -97,6 +101,7 @@ export async function GET(
         user_role: m.user_role,
         user_email: m.user_email,
         message: m.message,
+        image_url: (m as any).image_url || null,
         is_system_message: Boolean(m.is_system_message),
         created_at: m.created_at,
       })),
@@ -125,17 +130,17 @@ export async function POST(
 
     const { id: reportId } = await params
     const body = await request.json()
-    const { message } = body
+    const { message, imageUrl } = body
 
-    if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return NextResponse.json({ success: false, error: "Message is required" }, { status: 400, headers })
+    if ((!message || typeof message !== 'string' || message.trim().length === 0) && !imageUrl) {
+      return NextResponse.json({ success: false, error: "Message or image is required" }, { status: 400, headers })
     }
 
     // Insert message
     await execute(
-      `INSERT INTO report_messages (report_id, user_id, message, is_system_message) 
-       VALUES (?, ?, ?, FALSE)`,
-      [reportId, session.sub ?? null, message.trim()]
+      `INSERT INTO report_messages (report_id, user_id, message, image_url, is_system_message) 
+       VALUES (?, ?, ?, ?, FALSE)`,
+      [reportId, session.sub ?? null, (message || "").trim(), imageUrl || null]
     )
 
     // Update report's last_message_at and unread flags
@@ -157,7 +162,12 @@ export async function POST(
       )
     }
 
-    publishEvent("reports.updated", { action: "message_sent", id: String(reportId) })
+    publishEvent("reports.updated", {
+      action: "message_sent",
+      id: String(reportId),
+      senderRole: session.role,
+      preview: imageUrl && !message ? "Sent a photo" : (message || "").trim().slice(0, 80),
+    })
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

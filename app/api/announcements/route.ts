@@ -4,6 +4,25 @@ import { getSessionFromRequest, verifySession } from "@/lib/auth/session"
 import { normalizeAnnouncementImage } from "@/lib/server/image-url"
 import { publishEvent } from "@/lib/server/realtime"
 
+// Run once per server process to add the posted_by_user_id column if it doesn't exist
+const g = globalThis as typeof globalThis & { __announcementsMigrated?: boolean }
+if (!g.__announcementsMigrated) {
+  g.__announcementsMigrated = true
+  execute(
+    "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS posted_by_user_id INT NULL",
+    []
+  ).catch(() => {/* column may already exist or DB not ready yet */})
+}
+
+function normalizeAvatarUrl(value: unknown): string | null {
+  if (!value) return null
+  const s = typeof value === "string" ? value.trim() : String(value).trim()
+  if (!s) return null
+  if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/")) return s
+  if (s.startsWith("data:image/")) return s
+  return null
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log("=== Announcements GET ===")
@@ -11,7 +30,13 @@ export async function GET(request: NextRequest) {
     const session = token ? await verifySession(token) : null
     console.log("Session:", session?.sub, session?.role)
     
-    const rows = await queryAll<any>("SELECT * FROM announcements ORDER BY created_at DESC", [])
+    const rows = await queryAll<any>(
+      `SELECT a.*, u.avatar_url AS author_avatar_url, u.full_name AS author_full_name
+       FROM announcements a
+       LEFT JOIN users u ON u.id = a.posted_by_user_id
+       ORDER BY a.created_at DESC`,
+      []
+    )
     console.log("Found announcements:", rows.length)
     
     // If user is resident, fetch their liked announcements using the standard pattern
@@ -35,7 +60,8 @@ export async function GET(request: NextRequest) {
           content: r.content,
           type: r.type,
           priority: r.priority,
-          author: r.author,
+          author: r.author_full_name || r.author,
+          authorAvatarUrl: normalizeAvatarUrl(r.author_avatar_url),
           isActive: Boolean(r.is_active),
           status: r.status || "active",
           createdAt: r.created_at,
@@ -70,16 +96,34 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log("Creating announcement:", body.title)
     
+    // Fetch poster's info for the response
+    const posterRows = await queryAll<any>("SELECT full_name, avatar_url FROM users WHERE id = ?", [session.sub])
+    const poster = posterRows[0] || null
+
     const result = await execute(
-      "INSERT INTO announcements (title, content, type, priority, author, image_url, likes, location, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [body.title, body.content, body.type || "general", body.priority || "normal", body.author || "Official", body.image_url || null, body.likes || 0, body.location || null, body.status || "active"]
+      "INSERT INTO announcements (title, content, type, priority, author, image_url, likes, location, status, posted_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [body.title, body.content, body.type || "general", body.priority || "normal", poster?.full_name || body.author || "Official", body.image_url || null, body.likes || 0, body.location || null, body.status || "active", session.sub]
     )
     console.log("Insert result:", result)
-    publishEvent("announcements.updated", { action: "created", id: String(result.insertId) })
+    publishEvent("announcements.updated", { action: "created", id: String(result.insertId), title: body.title || "", content: body.content || "" })
 
     return NextResponse.json({
       success: true,
-      data: { id: String(result.insertId), title: body.title, content: body.content, type: body.type, priority: body.priority, author: body.author || "Official", imageUrl: normalizeAnnouncementImage(body.image_url), likes: body.likes || 0, location: body.location || null, status: body.status || "active", created_at: new Date().toISOString() },
+      data: {
+        id: String(result.insertId),
+        title: body.title,
+        content: body.content,
+        type: body.type,
+        priority: body.priority,
+        author: poster?.full_name || body.author || "Official",
+        authorAvatarUrl: normalizeAvatarUrl(poster?.avatar_url),
+        imageUrl: normalizeAnnouncementImage(body.image_url),
+        likes: body.likes || 0,
+        location: body.location || null,
+        status: body.status || "active",
+        created_at: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      },
     })
   } catch (e) {
     console.error("Announcements POST error:", e)

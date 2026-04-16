@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { ResidentHeader } from "@/components/resident-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { FileText, Plus, Clock, AlertCircle, CheckCircle, MessageCircle } from "lucide-react"
+import { FileText, Plus, Clock, AlertCircle, CheckCircle, MessageCircle, MapPin, LocateFixed, Loader2, ImageIcon, X } from "lucide-react"
 import { ReportChatModal } from "@/components/report-chat-modal"
 import { connectRealtimeEvents } from "@/lib/client/sse"
 
@@ -21,9 +21,12 @@ interface Report {
   description: string
   type: string
   location: string
+  latitude?: number | null
+  longitude?: number | null
   status: string
   created_at: string
   response?: string
+  images?: string[]
   unreadByResident?: boolean
   unreadReplyCount?: number
 }
@@ -43,6 +46,11 @@ export default function ReportsPage() {
     type: 'other',
     location: '',
   })
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [isLocating, setIsLocating] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadData()
@@ -122,15 +130,23 @@ export default function ReportsPage() {
 
     setIsSubmitting(true)
     try {
+      const fd = new FormData()
+      fd.append("title", formData.title)
+      fd.append("description", formData.description)
+      fd.append("type", formData.type)
+      fd.append("location", formData.location)
+      fd.append("reporterName", user.full_name || user.email)
+      fd.append("reporterContact", user.email)
+      if (gpsCoords) {
+        fd.append("latitude", String(gpsCoords.lat))
+        fd.append("longitude", String(gpsCoords.lng))
+      }
+      if (imageFile) fd.append("image", imageFile)
+
       const res = await fetch('/api/reports', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          ...formData,
-          reporterName: user.full_name || user.email,
-          reporterContact: user.email
-        })
+        body: fd,
       })
 
       const data = await res.json()
@@ -138,6 +154,10 @@ export default function ReportsPage() {
       if (data.success) {
         setIsDialogOpen(false)
         setFormData({ title: '', description: '', type: 'other', location: '' })
+        setGpsCoords(null)
+        setImageFile(null)
+        setImagePreview(null)
+        if (fileInputRef.current) fileInputRef.current.value = ""
         loadData()
         alert('Report submitted successfully!')
       } else {
@@ -243,7 +263,21 @@ export default function ReportsPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground mb-2">{report.description}</p>
-                  <p className="text-sm text-muted-foreground mb-4">Location: {report.location}</p>
+                  <div className="flex items-start gap-1 text-sm text-muted-foreground mb-4">
+                    <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+                    {report.latitude && report.longitude ? (
+                      <a
+                        href={`https://www.google.com/maps?q=${report.latitude},${report.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-foreground transition-colors break-words"
+                      >
+                        {report.location || `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}`}
+                      </a>
+                    ) : (
+                      <span>{report.location}</span>
+                    )}
+                  </div>
                   
                   {report.response && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -322,11 +356,96 @@ export default function ReportsPage() {
             </div>
             <div>
               <Label>Location</Label>
-              <Input
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                required
-              />
+              <div className="flex gap-2 mt-1">
+                <Input
+                  placeholder="Enter location description..."
+                  value={formData.location}
+                  onChange={(e) => {
+                    setFormData({ ...formData, location: e.target.value })
+                    setGpsCoords(null)
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={isLocating}
+                  title="Use my current location"
+                  onClick={async () => {
+                    if (!navigator.geolocation) return
+                    setIsLocating(true)
+                    navigator.geolocation.getCurrentPosition(
+                      async (pos) => {
+                        const { latitude, longitude } = pos.coords
+                        setGpsCoords({ lat: latitude, lng: longitude })
+                        try {
+                          const params = new URLSearchParams({ format: "jsonv2", lat: String(latitude), lon: String(longitude) })
+                          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, { headers: { "Accept-Language": "en" } })
+                          const json = await res.json()
+                          setFormData(prev => ({ ...prev, location: json.display_name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}` }))
+                        } catch {
+                          setFormData(prev => ({ ...prev, location: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}` }))
+                        }
+                        setIsLocating(false)
+                      },
+                      () => setIsLocating(false),
+                      { enableHighAccuracy: true, timeout: 10000 }
+                    )
+                  }}
+                >
+                  {isLocating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
+                </Button>
+              </div>
+              {gpsCoords && (
+                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> GPS location captured
+                </p>
+              )}
+            </div>
+            <div>
+              <Label>Photo <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <div className="mt-1 space-y-2">
+                {imagePreview ? (
+                  <div className="relative w-full">
+                    <img src={imagePreview} alt="Preview" className="w-full max-h-48 object-cover rounded-md border" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-1 right-1 h-6 w-6 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                      onClick={() => {
+                        setImageFile(null)
+                        setImagePreview(null)
+                        if (fileInputRef.current) fileInputRef.current.value = ""
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-md cursor-pointer hover:bg-muted/40 transition-colors">
+                    <ImageIcon className="h-6 w-6 text-muted-foreground mb-1" />
+                    <span className="text-xs text-muted-foreground">Click to attach a photo (max 2MB)</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null
+                        if (!file) return
+                        if (file.size > 2_000_000) {
+                          alert("Image must be under 2MB")
+                          e.target.value = ""
+                          return
+                        }
+                        setImageFile(file)
+                        setImagePreview(URL.createObjectURL(file))
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -354,6 +473,7 @@ export default function ReportsPage() {
             reporterName: user?.full_name || "",
             reporterContact: user?.email || "",
             createdAt: selectedReport.created_at,
+            images: selectedReport.images,
           }}
           currentUserRole="resident"
         />

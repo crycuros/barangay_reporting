@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { connectRealtimeEvents } from "@/lib/client/sse"
 import { ResidentHeader } from "@/components/resident-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Bell, ThumbsUp, AlertTriangle } from "lucide-react"
-import { connectRealtimeEvents } from "@/lib/client/sse"
 
 interface Announcement {
   id: string
@@ -17,18 +18,9 @@ interface Announcement {
   priority: string
   created_at: string
   author: string
+  authorAvatarUrl?: string | null
   imageUrl?: string | null
   likes?: number
-  status?: string
-}
-
-const isRenderableAnnouncementImage = (value: unknown): value is string => {
-  if (typeof value !== "string") return false
-  const src = value.trim()
-  if (!src) return false
-  if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("/")) return true
-  if (!src.startsWith("data:image/")) return false
-  return /^data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/.test(src.replace(/\s+/g, ""))
 }
 
 export default function AnnouncementsPage() {
@@ -37,37 +29,41 @@ export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [likedAnnouncements, setLikedAnnouncements] = useState<Set<string>>(new Set())
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+
+  const fetchAnnouncements = useCallback(async () => {
+    try {
+      const res = await fetch('/api/announcements', { credentials: 'include' })
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.success) {
+        setAnnouncements(data.data || [])
+        const likedIds = (data.data || [])
+          .filter((a: any) => a.userHasLiked)
+          .map((a: any) => a.id)
+        setLikedAnnouncements(new Set(likedIds))
+      }
+    } catch (error) {
+      console.error('Error fetching announcements:', error)
+    }
+  }, [])
 
   useEffect(() => {
     loadData()
   }, [])
 
+  // Connect SSE for real-time updates once authenticated
   useEffect(() => {
+    if (!isAuthenticated) return
     const cleanup = connectRealtimeEvents({
       onUpdate: (parsed) => {
-        if (parsed?.type === "announcements.updated") {
-          loadData()
+        if (parsed?.type === 'announcements.updated') {
+          fetchAnnouncements()
         }
       },
     })
     return cleanup
-  }, [])
-
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") {
-        loadData()
-      }
-    }
-    const interval = window.setInterval(refresh, 3000)
-    window.addEventListener("focus", refresh)
-    document.addEventListener("visibilitychange", refresh)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener("focus", refresh)
-      document.removeEventListener("visibilitychange", refresh)
-    }
-  }, [])
+  }, [isAuthenticated, fetchAnnouncements])
 
   const loadData = async () => {
     try {
@@ -86,30 +82,17 @@ export default function AnnouncementsPage() {
 
       if (sessionData.success) {
         setUser(sessionData.data)
+        setIsAuthenticated(true)
       }
 
       if (announcementsData.success) {
         const announcements = announcementsData.data || []
         setAnnouncements(announcements)
-        
-        // Load liked state for each announcement
-        if (sessionData.data?.id) {
-          const likedSet = new Set<string>()
-          for (const announcement of announcements) {
-            try {
-              const res = await fetch(`/api/announcements/${announcement.id}/liked`, { 
-                credentials: 'include' 
-              })
-              const data = await res.json()
-              if (data.userHasLiked) {
-                likedSet.add(announcement.id)
-              }
-            } catch (err) {
-              console.error('Error checking like status:', err)
-            }
-          }
-          setLikedAnnouncements(likedSet)
-        }
+        // Use userHasLiked flag already returned by the API
+        const likedSet = new Set<string>(
+          announcements.filter((a: any) => a.userHasLiked).map((a: any) => a.id)
+        )
+        setLikedAnnouncements(likedSet)
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -187,66 +170,64 @@ export default function AnnouncementsPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {announcements.map((announcement) => {
-              const isActiveEmergency =
-                (announcement.priority === "urgent" || announcement.type === "emergency") &&
-                String(announcement.status || "active").toLowerCase().trim() === "active"
-
-              return (
-                <Card key={announcement.id} className={isActiveEmergency ? "border-red-300 bg-red-50/50" : ""}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          {isActiveEmergency && <AlertTriangle className="h-5 w-5 text-red-600" />}
-                          <CardTitle>{announcement.title}</CardTitle>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant={announcement.type === "emergency" ? "destructive" : "secondary"}>
-                            {announcement.type}
-                          </Badge>
-                          <Badge variant="outline">{announcement.priority}</Badge>
-                          {String(announcement.status || "").toLowerCase().trim() === "resolved" && (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                              Resolved
-                            </Badge>
-                          )}
-                        </div>
+            {announcements.map((announcement) => (
+              <Card key={announcement.id} className={announcement.priority === 'urgent' ? 'border-red-300 bg-red-50/50' : ''}>
+                <CardHeader>
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-10 w-10 shrink-0">
+                      {announcement.authorAvatarUrl && (
+                        <AvatarImage src={announcement.authorAvatarUrl} alt={announcement.author} />
+                      )}
+                      <AvatarFallback>{(announcement.author?.[0] ?? 'A').toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        {announcement.priority === 'urgent' && (
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
+                        )}
+                        <CardTitle className="text-lg">{announcement.title}</CardTitle>
                       </div>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Badge variant={announcement.type === 'emergency' ? 'destructive' : 'secondary'}>
+                          {announcement.type}
+                        </Badge>
+                        <Badge variant="outline">
+                          {announcement.priority}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">{announcement.author}</span>
+                        {' • '}
+                        {new Date(announcement.created_at).toLocaleDateString()}
+                      </p>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4 whitespace-pre-wrap">{announcement.content}</p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4 whitespace-pre-wrap">{announcement.content}</p>
+                  
+                  {announcement.imageUrl && (
+                    <img 
+                      src={announcement.imageUrl} 
+                      alt={announcement.title}
+                      className="w-full h-64 object-cover rounded-lg mb-4"
+                    />
+                  )}
 
-                    {isRenderableAnnouncementImage(announcement.imageUrl) ? (
-                      <img
-                        src={announcement.imageUrl}
-                        alt={announcement.title}
-                        className="w-full h-64 object-cover rounded-lg mb-4"
-                      />
-                    ) : null}
-
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>By {announcement.author}</span>
-                      <span>•</span>
-                      <span>{new Date(announcement.created_at).toLocaleDateString()}</span>
-                    </div>
-
-                    <div className="flex items-center gap-4 mt-4 pt-4 border-t">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleLike(announcement.id)}
-                        className={likedAnnouncements.has(announcement.id) ? "text-blue-600" : ""}
-                      >
-                        <ThumbsUp className={`h-4 w-4 mr-2 ${likedAnnouncements.has(announcement.id) ? "fill-current" : ""}`} />
-                        {announcement.likes || 0} Likes
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                  <div className="flex items-center gap-4 mt-4 pt-4 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleLike(announcement.id)}
+                      className={likedAnnouncements.has(announcement.id) ? 'text-blue-600' : ''}
+                    >
+                      <ThumbsUp className={`h-4 w-4 mr-2 ${likedAnnouncements.has(announcement.id) ? 'fill-current' : ''}`} />
+                      {announcement.likes || 0} Likes
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </main>

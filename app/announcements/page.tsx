@@ -29,11 +29,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, ThumbsUp, Image, Smile, MapPin } from "lucide-react"
+import { Plus, Trash2, ThumbsUp, Image, Smile, MapPin, Pencil } from "lucide-react"
 import type { Announcement, AnnouncementType } from "@/lib/types"
 import { connectRealtimeEvents } from "@/lib/client/sse"
 
@@ -80,6 +80,7 @@ export default function AnnouncementsPage() {
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
   const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false)
   const [announcementToResolve, setAnnouncementToResolve] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const readAndSetFile = (file: File) => {
     const previewUrl = URL.createObjectURL(file)
@@ -320,10 +321,12 @@ export default function AnnouncementsPage() {
         uploadedImageUrl = uploadJson.data.url
       }
 
-      const payload = { ...formData, image_url: uploadedImageUrl }
+      const payload = { ...formData, image_url: uploadedImageUrl ?? formData.image_url }
       console.log("Submitting announcement:", payload)
-      const res = await fetch("/api/announcements", {
-        method: "POST",
+      const url = editingId ? `/api/announcements/${editingId}` : "/api/announcements"
+      const method = editingId ? "PATCH" : "POST"
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         credentials: "same-origin",
@@ -339,20 +342,25 @@ export default function AnnouncementsPage() {
       }
 
       if (res.ok) {
+        const wasEditing = editingId
         setIsDialogOpen(false)
+        setEditingId(null)
         setFormData({ title: "", content: "", type: "general", priority: "medium", author: "Admin", image_url: null, location: "" })
         setImageFile(null)
         if (imagePreviewUrl) {
           URL.revokeObjectURL(imagePreviewUrl)
           setImagePreviewUrl(null)
         }
-        // Don't refetch - just add the new announcement to state
-        const newAnnouncement = resData
-        if (newAnnouncement?.data) {
-          setAnnouncements(prev => [newAnnouncement.data, ...prev])
+        setShowLocationInput(false)
+        if (wasEditing) {
+          if (resData?.data) {
+            setAnnouncements(prev => prev.map(a => a.id === wasEditing ? { ...a, ...resData.data } : a))
+          }
+        } else {
+          if (resData?.data) {
+            setAnnouncements(prev => [resData.data, ...prev])
+          }
         }
-        // Don't dispatch event to prevent other components from refetching
-        // try { window.dispatchEvent(new Event("announcements:updated")) } catch (e) {}
       }
     } catch (error) {
       console.error("Submit error:", error)
@@ -405,6 +413,25 @@ export default function AnnouncementsPage() {
     }
   }
 
+  const openEditDialog = (announcement: Announcement) => {
+    setEditingId(announcement.id)
+    const existingImage = announcement.imageUrl || null
+    setFormData({
+      title: announcement.title || "",
+      content: announcement.content || "",
+      type: announcement.type || "general",
+      priority: announcement.priority || "medium",
+      author: announcement.author || "Admin",
+      image_url: existingImage,
+      location: announcement.location || "",
+    })
+    setImageFile(null)
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
+    setImagePreviewUrl(existingImage)
+    setShowLocationInput(!!(announcement.location))
+    setIsDialogOpen(true)
+  }
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "urgent":
@@ -443,7 +470,16 @@ export default function AnnouncementsPage() {
             <p className="text-muted-foreground mt-1">Manage barangay announcements and alerts</p>
           </div>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+              setIsDialogOpen(open)
+              if (!open) {
+                setEditingId(null)
+                setFormData({ title: "", content: "", type: "general", priority: "medium", author: "Admin", image_url: null, location: "" })
+                setImageFile(null)
+                if (imagePreviewUrl) { URL.revokeObjectURL(imagePreviewUrl); setImagePreviewUrl(null) }
+                setShowLocationInput(false)
+              }
+            }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -453,11 +489,21 @@ export default function AnnouncementsPage() {
             <DialogContent className="max-w-2xl">
               <form onSubmit={handleSubmit}>
                 <DialogHeader>
-                  <DialogTitle>Create Announcement</DialogTitle>
-                  <DialogDescription>Post an update to residents</DialogDescription>
+                  <DialogTitle>{editingId ? "Edit Announcement" : "Create Announcement"}</DialogTitle>
+                  <DialogDescription>{editingId ? "Update this announcement" : "Post an update to residents"}</DialogDescription>
                 </DialogHeader>
 
                 <div className="py-4">
+                  <div className="mb-4">
+                    <Label htmlFor="edit-title">Title</Label>
+                    <Input
+                      id="edit-title"
+                      placeholder="Announcement title"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
                   <div className="flex gap-4 items-start">
                     <Avatar>
                       <AvatarFallback>{formData.author?.[0] ?? "A"}</AvatarFallback>
@@ -562,7 +608,7 @@ export default function AnnouncementsPage() {
                     Cancel
                   </Button>
                   <Button type="submit" disabled={!(formData.content.trim().length > 0 || imageFile)}>
-                    Post
+                    {editingId ? "Save Changes" : "Post"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -575,18 +621,28 @@ export default function AnnouncementsPage() {
             <Card key={announcement.id}>
               <CardHeader>
                 <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <CardTitle className="text-xl">{announcement.title}</CardTitle>
-                      <Badge variant={getTypeColor(announcement.type)}>{announcement.type}</Badge>
-                      <Badge variant={getPriorityColor(announcement.priority)}>{announcement.priority}</Badge>
-                      {(announcement as any).status === "resolved" && (
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Resolved</Badge>
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <Avatar className="h-10 w-10 shrink-0">
+                      {(announcement as any).authorAvatarUrl && (
+                        <AvatarImage src={(announcement as any).authorAvatarUrl} alt={announcement.author} />
                       )}
+                      <AvatarFallback>{(announcement.author?.[0] ?? "A").toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <CardTitle className="text-xl">{announcement.title}</CardTitle>
+                        <Badge variant={getTypeColor(announcement.type)}>{announcement.type}</Badge>
+                        <Badge variant={getPriorityColor(announcement.priority)}>{announcement.priority}</Badge>
+                        {(announcement as any).status === "resolved" && (
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Resolved</Badge>
+                        )}
+                      </div>
+                      <CardDescription>
+                        <span className="font-medium text-foreground/70">{announcement.author}</span>
+                        {" "}&bull;{" "}
+                        {new Date(announcement.createdAt).toLocaleString()}
+                      </CardDescription>
                     </div>
-                    <CardDescription>
-                      By {announcement.author} • {new Date(announcement.createdAt).toLocaleString()}
-                    </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
                     {(announcement.type === "emergency" || announcement.priority === "urgent") && (
@@ -601,6 +657,11 @@ export default function AnnouncementsPage() {
                         className={`${(announcement as any).status === "resolved" ? "bg-green-50 text-green-700 border-green-200" : "text-amber-700 border-amber-200"}`}
                       >
                         {(announcement as any).status === "resolved" ? "✓ Resolved" : "Mark Resolved"}
+                      </Button>
+                    )}
+                    {((announcement as any).status !== "resolved") && (
+                      <Button variant="ghost" size="icon" onClick={() => openEditDialog(announcement)}>
+                        <Pencil className="h-4 w-4" />
                       </Button>
                     )}
                     <Button variant="ghost" size="icon" onClick={() => handleDelete(announcement.id)}>
